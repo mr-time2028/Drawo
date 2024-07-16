@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  postgres:
+    container_name: 'drawo_postgres'
+    image: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/data/postgresql
+    environment:
+      - POSTGRES_DB=drawo
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=123456
+
+volumes:
+  postgres-data:

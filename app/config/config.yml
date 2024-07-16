@@ -1,0 +1,14 @@
+app:
+  name: ""
+  secretKey: ""
+
+server:
+  host: ""
+  port: ""
+
+db:
+  name: ""
+  user: ""
+  pass: ""
+  host: ""
+  port: ""
