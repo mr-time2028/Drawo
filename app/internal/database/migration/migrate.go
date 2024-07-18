@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"drawo/internal/modules/user/models"
 	"drawo/pkg/database"
 	"fmt"
 	"log"
@@ -11,7 +12,9 @@ func Migrate() {
 
 	db := database.GetDB()
 
-	err := db.AutoMigrate()
+	err := db.AutoMigrate(
+		&models.User{},
+	)
 	if err != nil {
 		log.Fatal("Migration failed: ", err.Error())
 	}

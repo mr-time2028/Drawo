@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"drawo/internal/providers/routes"
 	"drawo/pkg/config"
 	"drawo/pkg/database"
 	"drawo/pkg/static"
@@ -29,6 +30,9 @@ func Serve() {
 
 	// initial router
 	Init()
+
+	// register routes
+	routes.RegisterRoutes(router)
 
 	// load static files
 	static.LoadStatic(GetRouter())
