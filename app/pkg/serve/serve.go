@@ -1,7 +1,7 @@
 package serve
 
 import (
-	"drawo/internal/providers/routes"
+	"drawo/internal/routes"
 	"drawo/pkg/config"
 	"drawo/pkg/database"
 	"drawo/pkg/static"

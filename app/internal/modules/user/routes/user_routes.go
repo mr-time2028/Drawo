@@ -6,5 +6,7 @@ import (
 )
 
 func Routes(router *gin.Engine) {
-	_ = controllers.New()
+	userController := controllers.New()
+
+	router.POST("/users/register/", userController.Register)
 }
