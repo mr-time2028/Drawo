@@ -1,5 +1,6 @@
 app:
   name: ""
+  domain: ""
   secretKey: ""
 
 server:
@@ -12,3 +13,9 @@ db:
   pass: ""
   host: ""
   port: ""
+
+auth:
+  issuer: ""
+  audience: ""
+  accessExpiry:
+  refreshExpiry:
