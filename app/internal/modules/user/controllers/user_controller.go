@@ -28,21 +28,31 @@ func (controller *Controller) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := controller.UserService.Register(&registerRequest)
-	if err != nil {
-		var statusCode int
-		var message gin.H
-		switch err.Error {
-		case errors.BadRequestErr:
-			statusCode = http.StatusBadRequest
-			message = gin.H{"message": gin.H{err.Field: []string{err.Message}}}
-		case errors.InternalServerErr:
-			statusCode = http.StatusInternalServerError
-			message = gin.H{"message": "internal server error"}
-		}
-		c.JSON(statusCode, message)
+	user, sErr := controller.UserService.Register(&registerRequest)
+	if sErr != nil {
+		status, message := errors.HandleServiceError(sErr)
+		c.JSON(status, message)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("user with id %s registered successfully", user.ID)})
+}
+
+func (controller *Controller) Login(c *gin.Context) {
+	var loginRequest requests.LoginRequest
+	if err := c.ShouldBindJSON(&loginRequest); err != nil {
+		errors.Init()
+		errors.SetFromErrors(err, &loginRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"message": errors.Get()})
+		return
+	}
+
+	tokens, sErr := controller.UserService.Login(&loginRequest)
+	if sErr != nil {
+		status, message := errors.HandleServiceError(sErr)
+		c.JSON(status, message)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken})
 }

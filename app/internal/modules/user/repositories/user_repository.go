@@ -37,3 +37,13 @@ func (userRepository *UserRepository) CheckIfUserExists(username string) (bool, 
 	}
 	return true, nil
 }
+
+func (userRepository *UserRepository) GetUserByUsername(username string) (*models.User, error) {
+	var user *models.User
+	condition := models.User{Username: username}
+	result := userRepository.DB.Where(condition).First(&user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return user, nil
+}
