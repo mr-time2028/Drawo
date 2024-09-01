@@ -1,7 +1,9 @@
 package migration
 
 import (
-	"drawo/internal/modules/user/models"
+	messageModel "drawo/internal/modules/message/models"
+	roomModel "drawo/internal/modules/room/models"
+	userModel "drawo/internal/modules/user/models"
 	"drawo/pkg/database"
 	"fmt"
 	"log"
@@ -20,7 +22,11 @@ func Migrate() {
 	fmt.Println("Extension uuid-ossp installed successfully")
 
 	// migrations
-	err := db.AutoMigrate(&models.User{})
+	err := db.AutoMigrate(
+		&userModel.User{},
+		&roomModel.Room{},
+		&messageModel.Message{},
+	)
 	if err != nil {
 		log.Fatal("Migration failed: ", err.Error())
 	}
