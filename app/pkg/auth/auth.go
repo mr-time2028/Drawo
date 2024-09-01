@@ -2,7 +2,10 @@ package auth
 
 import (
 	"drawo/pkg/config"
+	"errors"
+	"fmt"
 	"github.com/golang-jwt/jwt/v5"
+	"strings"
 	"time"
 )
 
@@ -66,4 +69,56 @@ func GenerateTokenPair(ju *JwtUser) (*TokenPairs, error) {
 	}
 
 	return tokenPairs, nil
+}
+
+func VerifyToken(authHeader string) (string, *Claims, error) {
+	if authHeader == "" {
+		return "", nil, errors.New("there no authorization header")
+	}
+
+	headerParts := strings.Split(authHeader, " ")
+	if len(headerParts) != 2 {
+		return "", nil, errors.New("invalid auth header")
+	}
+
+	if headerParts[0] != "Bearer" {
+		return "", nil, errors.New("invalid auth header")
+	}
+
+	token := headerParts[1]
+
+	claims, err := ParseWithClaims(token)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return token, claims, nil
+}
+
+func ParseWithClaims(token string) (*Claims, error) {
+	config.SetConfig()
+	cfg := config.GetConfig()
+
+	secretKey := cfg.App.SecretKey
+	issuer := cfg.Auth.Issuer
+
+	claims := &Claims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(secretKey), nil
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "token is expired") {
+			return nil, errors.New("token has expired")
+		}
+		return nil, err
+	}
+
+	if claims.Issuer != issuer {
+		return nil, errors.New("invalid issuer")
+	}
+
+	return claims, nil
 }
