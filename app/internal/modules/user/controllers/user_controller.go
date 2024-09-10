@@ -27,9 +27,9 @@ func (controller *Controller) Register(c *gin.Context) {
 		return
 	}
 
-	user, sErr := controller.UserService.Register(&registerRequest)
-	if sErr != nil {
-		status, message := errors.HandleServiceError(sErr)
+	user, tErr := controller.UserService.Register(&registerRequest)
+	if tErr != nil {
+		status, message := errors.HandleTypedError(tErr)
 		c.JSON(status, message)
 		return
 	}
@@ -45,12 +45,33 @@ func (controller *Controller) Login(c *gin.Context) {
 		return
 	}
 
-	tokens, sErr := controller.UserService.Login(&loginRequest)
-	if sErr != nil {
-		status, message := errors.HandleServiceError(sErr)
+	tokens, tErr := controller.UserService.Login(&loginRequest)
+	if tErr != nil {
+		status, message := errors.HandleTypedError(tErr)
 		c.JSON(status, message)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"access_token": tokens.AccessToken, "refresh_token": tokens.RefreshToken})
+}
+
+func (controller *Controller) GetAccessTokenByRefreshToken(c *gin.Context) {
+	var requestBody struct {
+		RefreshToken string `json:"refresh_token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		status, message := errors.HandleJsonError(err, &requestBody)
+		c.JSON(status, message)
+		return
+	}
+
+	accessToken, tErr := controller.UserService.GenerateAccessTokenByRefreshToken(requestBody.RefreshToken)
+	if tErr != nil {
+		status, message := errors.HandleTypedError(tErr)
+		c.JSON(status, message)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"access_token": accessToken})
 }

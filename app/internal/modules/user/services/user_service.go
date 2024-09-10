@@ -22,10 +22,9 @@ func New() *UserService {
 	}
 }
 
-func (userService *UserService) Register(registerRequest *requests.RegisterRequest) (*models.User, *errors.ServiceError) {
-	isMatchPasswords := helpers.CompareRequestPasswords(registerRequest.Password, registerRequest.ConfirmPassword)
-	if !isMatchPasswords {
-		return nil, &errors.ServiceError{
+func (userService *UserService) Register(registerRequest *requests.RegisterRequest) (*models.User, *errors.TypedError) {
+	if registerRequest.Password != registerRequest.ConfirmPassword {
+		return nil, &errors.TypedError{
 			Error:   errors.BadRequestErr,
 			Field:   "password",
 			Message: "password and confirm password are not match",
@@ -34,7 +33,7 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 
 	isExistsUser, err := userService.userRepository.CheckIfUserExists(registerRequest.Username)
 	if err != nil {
-		return nil, &errors.ServiceError{
+		return nil, &errors.TypedError{
 			Error:   errors.InternalServerErr,
 			Field:   "username",
 			Message: fmt.Sprintf("cannot check if user exists: %s", err.Error()),
@@ -42,7 +41,7 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 	}
 
 	if isExistsUser {
-		return nil, &errors.ServiceError{
+		return nil, &errors.TypedError{
 			Error:   errors.BadRequestErr,
 			Field:   "username",
 			Message: "username already taken",
@@ -51,7 +50,7 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 
 	hashedPassword, err := helpers.HashPassword(registerRequest.Password)
 	if err != nil {
-		return nil, &errors.ServiceError{
+		return nil, &errors.TypedError{
 			Error:   errors.InternalServerErr,
 			Field:   "password",
 			Message: fmt.Sprintf("cannot hash password: %s", err.Error()),
@@ -65,7 +64,7 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 
 	newUser, err := userService.userRepository.InsertOneUser(user)
 	if err != nil {
-		return nil, &errors.ServiceError{
+		return nil, &errors.TypedError{
 			Error:   errors.InternalServerErr,
 			Message: fmt.Sprintf("cannot insert user: %s", err.Error()),
 		}
@@ -74,18 +73,18 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 	return newUser, nil
 }
 
-func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*auth.TokenPairs, *errors.ServiceError) {
+func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*auth.TokenPairs, *errors.TypedError) {
 	user, err := userService.userRepository.GetUserByUsername(loginRequest.Username)
 	if err != nil {
 		switch err {
 		case gorm.ErrRecordNotFound:
-			return nil, &errors.ServiceError{
-				Error:   errors.BadRequestErr,
+			return nil, &errors.TypedError{
+				Error:   errors.UnauthorizedErr,
 				Field:   "",
 				Message: "incorrect username or password",
 			}
 		default:
-			return nil, &errors.ServiceError{
+			return nil, &errors.TypedError{
 				Error:   errors.InternalServerErr,
 				Field:   "username",
 				Message: fmt.Sprintf("cannot get the user from the database: %s", err.Error()),
@@ -93,16 +92,16 @@ func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*aut
 		}
 	}
 
-	if err = helpers.CompareRequestAndHashPasswords(loginRequest.Password, user.Password); err != nil {
+	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(loginRequest.Password)); err != nil {
 		switch err {
 		case bcrypt.ErrMismatchedHashAndPassword:
-			return nil, &errors.ServiceError{
-				Error:   errors.BadRequestErr,
+			return nil, &errors.TypedError{
+				Error:   errors.UnauthorizedErr,
 				Field:   "",
 				Message: "incorrect username or password",
 			}
 		default:
-			return nil, &errors.ServiceError{
+			return nil, &errors.TypedError{
 				Error:   errors.InternalServerErr,
 				Field:   "password",
 				Message: fmt.Sprintf("cannot compare user password with request password: %s", err.Error()),
@@ -114,7 +113,7 @@ func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*aut
 		ID: user.ID,
 	})
 	if err != nil {
-		return nil, &errors.ServiceError{
+		return nil, &errors.TypedError{
 			Error:   errors.InternalServerErr,
 			Field:   "token",
 			Message: fmt.Sprintf("cannot generate token pairs: %s", err.Error()),
@@ -122,4 +121,47 @@ func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*aut
 	}
 
 	return tokens, nil
+}
+
+func (userService *UserService) GenerateAccessTokenByRefreshToken(refreshToken string) (string, *errors.TypedError) {
+	claims, err := auth.ParseWithClaims(refreshToken)
+	if err != nil || claims.TokenType != "refresh" {
+		return "", &errors.TypedError{
+			Error:   errors.UnauthorizedErr,
+			Field:   "",
+			Message: "invalid refresh token",
+		}
+	}
+
+	userID := claims.Subject
+	user, err := userService.userRepository.GetUserByID(userID)
+	if err != nil {
+		switch err {
+		case gorm.ErrRecordNotFound:
+			return "", &errors.TypedError{
+				Error:   errors.UnauthorizedErr,
+				Field:   "",
+				Message: "invalid refresh token",
+			}
+		default:
+			return "", &errors.TypedError{
+				Error:   errors.InternalServerErr,
+				Field:   "userID",
+				Message: fmt.Sprintf("cannot get the user from the database: %s", err.Error()),
+			}
+		}
+	}
+
+	tokens, err := auth.GenerateTokenPair(&auth.JwtUser{
+		ID: user.ID,
+	})
+	if err != nil {
+		return "", &errors.TypedError{
+			Error:   errors.InternalServerErr,
+			Field:   "token",
+			Message: fmt.Sprintf("cannot generate token pairs: %s", err.Error()),
+		}
+	}
+
+	return tokens.AccessToken, nil
 }

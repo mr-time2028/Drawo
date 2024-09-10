@@ -42,23 +42,27 @@ func SetFromErrors(err error, obj interface{}) {
 	}
 }
 
-type ServiceError struct {
+type TypedError struct {
 	Error   error
 	Field   string
 	Message string
 }
 
-func HandleServiceError(sErr *ServiceError) (status int, message *gin.H) {
+func HandleTypedError(sErr *TypedError) (status int, message *gin.H) {
 	var c int
 	var m *gin.H
+
+	if sErr.Field == "" {
+		m = &gin.H{"message": sErr.Message}
+	} else {
+		m = &gin.H{"message": gin.H{sErr.Field: []string{sErr.Message}}}
+	}
+
 	switch sErr.Error {
 	case BadRequestErr:
 		c = http.StatusBadRequest
-		if sErr.Field == "" {
-			m = &gin.H{"message": sErr.Message}
-		} else {
-			m = &gin.H{"message": gin.H{sErr.Field: []string{sErr.Message}}}
-		}
+	case UnauthorizedErr:
+		c = http.StatusUnauthorized
 	case InternalServerErr:
 		c = http.StatusInternalServerError
 		m = &gin.H{"message": InternalServerErr.Error()}

@@ -47,3 +47,13 @@ func (userRepository *UserRepository) GetUserByUsername(username string) (*model
 	}
 	return user, nil
 }
+
+func (userRepository *UserRepository) GetUserByID(id string) (*models.User, error) {
+	var user *models.User
+	condition := models.User{ID: id}
+	result := userRepository.DB.Where(condition).First(&user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return user, nil
+}
