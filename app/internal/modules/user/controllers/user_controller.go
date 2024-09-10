@@ -22,9 +22,8 @@ func New() *Controller {
 func (controller *Controller) Register(c *gin.Context) {
 	var registerRequest requests.RegisterRequest
 	if err := c.ShouldBindJSON(&registerRequest); err != nil {
-		errors.Init()
-		errors.SetFromErrors(err, &registerRequest)
-		c.JSON(http.StatusBadRequest, gin.H{"message": errors.Get()})
+		status, message := errors.HandleJsonError(err, &registerRequest)
+		c.JSON(status, message)
 		return
 	}
 
@@ -41,9 +40,8 @@ func (controller *Controller) Register(c *gin.Context) {
 func (controller *Controller) Login(c *gin.Context) {
 	var loginRequest requests.LoginRequest
 	if err := c.ShouldBindJSON(&loginRequest); err != nil {
-		errors.Init()
-		errors.SetFromErrors(err, &loginRequest)
-		c.JSON(http.StatusBadRequest, gin.H{"message": errors.Get()})
+		status, message := errors.HandleJsonError(err, &loginRequest)
+		c.JSON(status, message)
 		return
 	}
 

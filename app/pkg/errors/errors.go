@@ -67,3 +67,15 @@ func HandleServiceError(sErr *ServiceError) (status int, message *gin.H) {
 
 	return c, m
 }
+
+func HandleJsonError(err error, obj any) (status int, message *gin.H) {
+	Init()
+	SetFromErrors(err, obj)
+	validationErr := Get()
+
+	if validationErr != nil && len(validationErr) > 0 {
+		return http.StatusBadRequest, &gin.H{"message": validationErr}
+	} else {
+		return http.StatusBadRequest, &gin.H{"message": err.Error()}
+	}
+}
