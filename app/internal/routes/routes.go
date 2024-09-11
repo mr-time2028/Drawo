@@ -8,5 +8,7 @@ import (
 
 func RegisterRoutes(router *gin.Engine) {
 	router.Use(middlewares.CORSMiddleware())
+	router.HandleMethodNotAllowed = true
+
 	UserRoutes.Routes(router)
 }
