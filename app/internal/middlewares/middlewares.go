@@ -1,8 +1,11 @@
 package middlewares
 
 import (
+	"drawo/pkg/auth"
+	"drawo/pkg/errors"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"net/http"
 	"time"
 )
 
@@ -18,4 +21,16 @@ func CORSMiddleware() gin.HandlerFunc {
 		},
 		MaxAge: 24 * time.Hour,
 	})
+}
+
+func AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.Request.Header.Get("Authorization")
+		_, _, err := auth.VerifyAuthHeaderAccessToken(authHeader)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": errors.UnauthorizedErr.Error()})
+			return
+		}
+		c.Next()
+	}
 }
