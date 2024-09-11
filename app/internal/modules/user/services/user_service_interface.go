@@ -11,4 +11,5 @@ type UserServiceInterface interface {
 	Register(registerRequest *requests.RegisterRequest) (*models.User, *errors.TypedError)
 	Login(loginRequest *requests.LoginRequest) (*auth.TokenPairs, *errors.TypedError)
 	GenerateAccessTokenByRefreshToken(refreshToken string) (string, *errors.TypedError)
+	VerifyAccessToken(accessToken string) (*auth.Claims, *errors.TypedError)
 }

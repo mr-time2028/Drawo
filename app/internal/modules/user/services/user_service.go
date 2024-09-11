@@ -165,3 +165,15 @@ func (userService *UserService) GenerateAccessTokenByRefreshToken(refreshToken s
 
 	return tokens.AccessToken, nil
 }
+
+func (userService *UserService) VerifyAccessToken(accessToken string) (*auth.Claims, *errors.TypedError) {
+	claims, err := auth.VerifyAccessToken(accessToken)
+	if err != nil {
+		return nil, &errors.TypedError{
+			Error:   errors.UnauthorizedErr,
+			Field:   "",
+			Message: "invalid access token",
+		}
+	}
+	return claims, nil
+}

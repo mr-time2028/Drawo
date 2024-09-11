@@ -75,3 +75,24 @@ func (controller *Controller) GetAccessTokenByRefreshToken(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"access_token": accessToken})
 }
+
+func (controller *Controller) VerifyAccessToken(c *gin.Context) {
+	var requestBody struct {
+		AccessToken string `json:"access_token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		status, message := errors.HandleJsonError(err, &requestBody)
+		c.JSON(status, message)
+		return
+	}
+
+	accessToken, tErr := controller.UserService.VerifyAccessToken(requestBody.AccessToken)
+	if tErr != nil {
+		status, message := errors.HandleTypedError(tErr)
+		c.JSON(status, message)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"access_token": accessToken})
+}

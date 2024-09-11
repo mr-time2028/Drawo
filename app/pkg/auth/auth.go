@@ -71,7 +71,7 @@ func GenerateTokenPair(ju *JwtUser) (*TokenPairs, error) {
 	return tokenPairs, nil
 }
 
-func VerifyToken(authHeader string) (string, *Claims, error) {
+func VerifyAuthHeaderAccessToken(authHeader string) (string, *Claims, error) {
 	if authHeader == "" {
 		return "", nil, errors.New("there no authorization header")
 	}
@@ -95,6 +95,15 @@ func VerifyToken(authHeader string) (string, *Claims, error) {
 	return token, claims, nil
 }
 
+func VerifyAccessToken(accessToken string) (*Claims, error) {
+	claims, err := ParseWithClaims(accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return claims, nil
+}
+
 func ParseWithClaims(token string) (*Claims, error) {
 	config.SetConfig()
 	cfg := config.GetConfig()
@@ -116,8 +125,16 @@ func ParseWithClaims(token string) (*Claims, error) {
 		return nil, err
 	}
 
+	if claims.TokenType != "access" {
+		return nil, errors.New("invalid token")
+	}
+
 	if claims.Issuer != issuer {
 		return nil, errors.New("invalid issuer")
+	}
+
+	if claims.ExpiresAt.Before(time.Now()) {
+		return nil, jwt.ErrTokenExpired
 	}
 
 	return claims, nil

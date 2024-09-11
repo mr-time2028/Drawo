@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -80,6 +81,9 @@ func HandleJsonError(err error, obj any) (status int, message *gin.H) {
 	if validationErr != nil && len(validationErr) > 0 {
 		return http.StatusBadRequest, &gin.H{"message": validationErr}
 	} else {
+		if err == io.EOF {
+			return http.StatusBadRequest, &gin.H{"message": "request body cannot be empty"}
+		}
 		return http.StatusBadRequest, &gin.H{"message": err.Error()}
 	}
 }
