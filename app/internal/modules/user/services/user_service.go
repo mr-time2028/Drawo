@@ -1,11 +1,12 @@
 package services
 
 import (
-	"drawo/internal/modules/user/helpers"
-	"drawo/internal/modules/user/models"
+	"drawo/internal/modules/token/helpers"
+	tokenModel "drawo/internal/modules/token/models"
+	userHelper "drawo/internal/modules/user/helpers"
+	userModel "drawo/internal/modules/user/models"
 	"drawo/internal/modules/user/repositories"
 	"drawo/internal/modules/user/requests"
-	"drawo/pkg/auth"
 	"drawo/pkg/errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
@@ -22,7 +23,7 @@ func New() *UserService {
 	}
 }
 
-func (userService *UserService) Register(registerRequest *requests.RegisterRequest) (*models.User, *errors.TypedError) {
+func (userService *UserService) Register(registerRequest *requests.RegisterRequest) (*userModel.User, *errors.TypedError) {
 	if registerRequest.Password != registerRequest.ConfirmPassword {
 		return nil, &errors.TypedError{
 			Error:   errors.BadRequestErr,
@@ -48,7 +49,7 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 		}
 	}
 
-	hashedPassword, err := helpers.HashPassword(registerRequest.Password)
+	hashedPassword, err := userHelper.HashPassword(registerRequest.Password)
 	if err != nil {
 		return nil, &errors.TypedError{
 			Error:   errors.InternalServerErr,
@@ -57,7 +58,7 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 		}
 	}
 
-	user := models.User{
+	user := userModel.User{
 		Username: registerRequest.Username,
 		Password: string(hashedPassword),
 	}
@@ -73,7 +74,7 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 	return newUser, nil
 }
 
-func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*auth.TokenPairs, *errors.TypedError) {
+func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*tokenModel.JWTTokenPairs, *errors.TypedError) {
 	user, err := userService.userRepository.GetUserByUsername(loginRequest.Username)
 	if err != nil {
 		switch err {
@@ -109,7 +110,7 @@ func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*aut
 		}
 	}
 
-	tokens, err := auth.GenerateTokenPair(&auth.JwtUser{
+	tokens, err := helpers.GenerateTokenPair(&tokenModel.JwtUser{
 		ID: user.ID,
 	})
 	if err != nil {
@@ -121,59 +122,4 @@ func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*aut
 	}
 
 	return tokens, nil
-}
-
-func (userService *UserService) GenerateAccessTokenByRefreshToken(refreshToken string) (string, *errors.TypedError) {
-	claims, err := auth.ParseWithClaims(refreshToken)
-	if err != nil || claims.TokenType != "refresh" {
-		return "", &errors.TypedError{
-			Error:   errors.UnauthorizedErr,
-			Field:   "",
-			Message: "invalid refresh token",
-		}
-	}
-
-	userID := claims.Subject
-	user, err := userService.userRepository.GetUserByID(userID)
-	if err != nil {
-		switch err {
-		case gorm.ErrRecordNotFound:
-			return "", &errors.TypedError{
-				Error:   errors.UnauthorizedErr,
-				Field:   "",
-				Message: "invalid refresh token",
-			}
-		default:
-			return "", &errors.TypedError{
-				Error:   errors.InternalServerErr,
-				Field:   "userID",
-				Message: fmt.Sprintf("cannot get the user from the database: %s", err.Error()),
-			}
-		}
-	}
-
-	tokens, err := auth.GenerateTokenPair(&auth.JwtUser{
-		ID: user.ID,
-	})
-	if err != nil {
-		return "", &errors.TypedError{
-			Error:   errors.InternalServerErr,
-			Field:   "token",
-			Message: fmt.Sprintf("cannot generate token pairs: %s", err.Error()),
-		}
-	}
-
-	return tokens.AccessToken, nil
-}
-
-func (userService *UserService) VerifyAccessToken(accessToken string) (*auth.Claims, *errors.TypedError) {
-	claims, err := auth.VerifyAccessToken(accessToken)
-	if err != nil {
-		return nil, &errors.TypedError{
-			Error:   errors.UnauthorizedErr,
-			Field:   "",
-			Message: "invalid access token",
-		}
-	}
-	return claims, nil
 }

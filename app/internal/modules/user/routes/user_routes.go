@@ -10,6 +10,4 @@ func Routes(router *gin.Engine) {
 
 	router.POST("/users/register/", userController.Register)
 	router.POST("/users/login/", userController.Login)
-	router.POST("/users/get_access_token/", userController.GetAccessTokenByRefreshToken)
-	router.POST("/users/verify_access_token/", userController.VerifyAccessToken)
 }

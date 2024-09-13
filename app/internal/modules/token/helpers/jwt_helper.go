@@ -1,6 +1,7 @@
-package auth
+package helpers
 
 import (
+	"drawo/internal/modules/token/models"
 	"drawo/pkg/config"
 	"errors"
 	"fmt"
@@ -9,21 +10,7 @@ import (
 	"time"
 )
 
-type JwtUser struct {
-	ID string
-}
-
-type TokenPairs struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
-
-type Claims struct {
-	jwt.RegisteredClaims
-	TokenType string
-}
-
-func GenerateTokenPair(ju *JwtUser) (*TokenPairs, error) {
+func GenerateTokenPair(ju *models.JwtUser) (*models.JWTTokenPairs, error) {
 	config.SetConfig()
 	cfg := config.GetConfig()
 
@@ -46,7 +33,7 @@ func GenerateTokenPair(ju *JwtUser) (*TokenPairs, error) {
 
 	signedAccessToken, err := token.SignedString([]byte(secretKey))
 	if err != nil {
-		return &TokenPairs{}, err
+		return &models.JWTTokenPairs{}, err
 	}
 
 	refreshToken := jwt.New(jwt.SigningMethodHS256)
@@ -60,18 +47,63 @@ func GenerateTokenPair(ju *JwtUser) (*TokenPairs, error) {
 
 	signedRefreshToken, err := refreshToken.SignedString([]byte(secretKey))
 	if err != nil {
-		return &TokenPairs{}, err
+		return &models.JWTTokenPairs{}, err
 	}
 
-	var tokenPairs = &TokenPairs{
+	var JWTTokenPairs = &models.JWTTokenPairs{
 		AccessToken:  signedAccessToken,
 		RefreshToken: signedRefreshToken,
 	}
 
-	return tokenPairs, nil
+	return JWTTokenPairs, nil
 }
 
-func VerifyAuthHeaderAccessToken(authHeader string) (string, *Claims, error) {
+func ParseWithClaims(token string) (*models.JWTClaims, error) {
+	config.SetConfig()
+	cfg := config.GetConfig()
+
+	secretKey := cfg.App.SecretKey
+	issuer := cfg.Auth.Issuer
+
+	claims := &models.JWTClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(secretKey), nil
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "token is expired") {
+			return nil, errors.New("token has expired")
+		}
+		return nil, err
+	}
+
+	if claims.Issuer != issuer {
+		return nil, errors.New("invalid issuer")
+	}
+
+	if claims.ExpiresAt.Before(time.Now()) {
+		return nil, jwt.ErrTokenExpired
+	}
+
+	return claims, nil
+}
+
+func VerifyAccessToken(accessToken string) (*models.JWTClaims, error) {
+	claims, err := ParseWithClaims(accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.TokenType != "access" {
+		return nil, errors.New("invalid token")
+	}
+
+	return claims, nil
+}
+
+func VerifyAuthHeaderAccessToken(authHeader string) (string, *models.JWTClaims, error) {
 	if authHeader == "" {
 		return "", nil, errors.New("there no authorization header")
 	}
@@ -87,55 +119,10 @@ func VerifyAuthHeaderAccessToken(authHeader string) (string, *Claims, error) {
 
 	token := headerParts[1]
 
-	claims, err := ParseWithClaims(token)
+	claims, err := VerifyAccessToken(token)
 	if err != nil {
 		return "", nil, err
 	}
 
 	return token, claims, nil
-}
-
-func VerifyAccessToken(accessToken string) (*Claims, error) {
-	claims, err := ParseWithClaims(accessToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return claims, nil
-}
-
-func ParseWithClaims(token string) (*Claims, error) {
-	config.SetConfig()
-	cfg := config.GetConfig()
-
-	secretKey := cfg.App.SecretKey
-	issuer := cfg.Auth.Issuer
-
-	claims := &Claims{}
-	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(secretKey), nil
-	})
-	if err != nil {
-		if strings.Contains(err.Error(), "token is expired") {
-			return nil, errors.New("token has expired")
-		}
-		return nil, err
-	}
-
-	if claims.TokenType != "access" {
-		return nil, errors.New("invalid token")
-	}
-
-	if claims.Issuer != issuer {
-		return nil, errors.New("invalid issuer")
-	}
-
-	if claims.ExpiresAt.Before(time.Now()) {
-		return nil, jwt.ErrTokenExpired
-	}
-
-	return claims, nil
 }
