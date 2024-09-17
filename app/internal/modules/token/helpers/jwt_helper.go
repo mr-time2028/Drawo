@@ -103,21 +103,30 @@ func VerifyAccessToken(accessToken string) (*models.JWTClaims, error) {
 	return claims, nil
 }
 
-func VerifyAuthHeaderAccessToken(authHeader string) (string, *models.JWTClaims, error) {
+func GetAccessTokenFromAuthHeader(authHeader string) (string, error) {
 	if authHeader == "" {
-		return "", nil, errors.New("there no authorization header")
+		return "", errors.New("there no authorization header")
 	}
 
 	headerParts := strings.Split(authHeader, " ")
 	if len(headerParts) != 2 {
-		return "", nil, errors.New("invalid auth header")
+		return "", errors.New("invalid auth header")
 	}
 
 	if headerParts[0] != "Bearer" {
-		return "", nil, errors.New("invalid auth header")
+		return "", errors.New("invalid auth header")
 	}
 
 	token := headerParts[1]
+
+	return token, nil
+}
+
+func VerifyAuthHeaderAccessToken(authHeader string) (string, *models.JWTClaims, error) {
+	token, err := GetAccessTokenFromAuthHeader(authHeader)
+	if err != nil {
+		return "", nil, err
+	}
 
 	claims, err := VerifyAccessToken(token)
 	if err != nil {

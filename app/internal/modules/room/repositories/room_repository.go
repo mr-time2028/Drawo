@@ -16,12 +16,12 @@ func New() *RoomRepository {
 	}
 }
 
-func (roomRepository *RoomRepository) InsertOneRoom(room *models.Room) (string, error) {
+func (roomRepository *RoomRepository) InsertOneRoom(room *models.Room) (*models.Room, error) {
 	result := roomRepository.DB.Create(room)
 	if result.Error != nil {
-		return "", result.Error
+		return nil, result.Error
 	}
-	return room.ID, nil
+	return room, nil
 }
 
 func (roomRepository *RoomRepository) GetAllRooms() ([]*models.Room, error) {
