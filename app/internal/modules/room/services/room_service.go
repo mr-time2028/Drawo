@@ -1,52 +1,31 @@
 package services
 
 import (
-	"drawo/internal/modules/room/models"
+	roomModel "drawo/internal/modules/room/models"
 	roomRepository "drawo/internal/modules/room/repositories"
 	"drawo/internal/modules/room/requests"
-	tokenHelper "drawo/internal/modules/token/helpers"
 	userHelper "drawo/internal/modules/user/helpers"
-	userReposiroty "drawo/internal/modules/user/repositories"
+	userModel "drawo/internal/modules/user/models"
+	userRepository "drawo/internal/modules/user/repositories"
 	"drawo/pkg/errors"
 )
 
 type RoomService struct {
 	roomRepository roomRepository.RoomRepositoryInterface
-	userRepository userReposiroty.UserRepositoryInterface
+	userRepository userRepository.UserRepositoryInterface
 }
 
 func New() *RoomService {
 	return &RoomService{
 		roomRepository: roomRepository.New(),
-		userRepository: userReposiroty.New(),
+		userRepository: userRepository.New(),
 	}
 }
 
 func (roomService *RoomService) CreatePrivateRoom(
-	authHeader string,
+	identifier *userModel.User,
 	roomRequest *requests.RoomRequest,
-) (*models.Room, *errors.TypedError) {
-	// get access token from auth header
-	_, claims, err := tokenHelper.VerifyAuthHeaderAccessToken(authHeader)
-	if err != nil {
-		return nil, &errors.TypedError{
-			Message: "invalid auth header",
-			Field:   "",
-			Error:   errors.ForbiddenErr,
-		}
-	}
-
-	// get user by user id
-	userID := claims.Subject
-	user, err := roomService.userRepository.GetUserByID(userID)
-	if err != nil {
-		return nil, &errors.TypedError{
-			Message: "cannot get user from the database",
-			Field:   "userID",
-			Error:   errors.InternalServerErr,
-		}
-	}
-
+) (*roomModel.Room, *errors.TypedError) {
 	// hash password
 	hashedPassword, err := userHelper.HashPassword(roomRequest.Password)
 	if err != nil {
@@ -58,11 +37,11 @@ func (roomService *RoomService) CreatePrivateRoom(
 	}
 
 	// create room with user id and hashed password
-	room := &models.Room{
+	room := &roomModel.Room{
 		Name:       roomRequest.Name,
-		Identifier: user,
+		Identifier: identifier,
 		Password:   string(hashedPassword),
-		Type:       models.Private,
+		Type:       roomModel.Private,
 	}
 	newRoom, err := roomService.roomRepository.InsertOneRoom(room)
 	if err != nil {

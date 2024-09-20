@@ -2,7 +2,8 @@ package controllers
 
 import (
 	"drawo/internal/modules/room/requests"
-	"drawo/internal/modules/room/services"
+	roomService "drawo/internal/modules/room/services"
+	userService "drawo/internal/modules/user/services"
 	"drawo/pkg/errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -10,12 +11,14 @@ import (
 )
 
 type Controller struct {
-	RoomService services.RoomServiceInterface
+	RoomService roomService.RoomServiceInterface
+	UserService userService.UserServiceInterface
 }
 
 func New() *Controller {
 	return &Controller{
-		RoomService: services.New(),
+		RoomService: roomService.New(),
+		UserService: userService.New(),
 	}
 }
 
@@ -27,8 +30,15 @@ func (controller *Controller) CreatePrivateRoom(c *gin.Context) {
 		return
 	}
 
-	identifier := c.Request.Header.Get("Authorization")
-	newRoom, tErr := controller.RoomService.CreatePrivateRoom(identifier, &roomRequest)
+	authHeader := c.Request.Header.Get("Authorization")
+	user, tErr := controller.UserService.GetUserFromAuthHeader(authHeader)
+	if tErr != nil {
+		status, message := errors.HandleTypedError(tErr)
+		c.JSON(status, message)
+		return
+	}
+
+	newRoom, tErr := controller.RoomService.CreatePrivateRoom(user, &roomRequest)
 	if tErr != nil {
 		status, message := errors.HandleTypedError(tErr)
 		c.JSON(status, message)

@@ -23,7 +23,10 @@ func New() *UserService {
 	}
 }
 
-func (userService *UserService) Register(registerRequest *requests.RegisterRequest) (*userModel.User, *errors.TypedError) {
+func (userService *UserService) Register(registerRequest *requests.RegisterRequest) (
+	*userModel.User,
+	*errors.TypedError,
+) {
 	if registerRequest.Password != registerRequest.ConfirmPassword {
 		return nil, &errors.TypedError{
 			Error:   errors.BadRequestErr,
@@ -74,7 +77,10 @@ func (userService *UserService) Register(registerRequest *requests.RegisterReque
 	return newUser, nil
 }
 
-func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*tokenModel.JWTTokenPairs, *errors.TypedError) {
+func (userService *UserService) Login(loginRequest *requests.LoginRequest) (
+	*tokenModel.JWTTokenPairs,
+	*errors.TypedError,
+) {
 	user, err := userService.userRepository.GetUserByUsername(loginRequest.Username)
 	if err != nil {
 		switch err {
@@ -122,4 +128,36 @@ func (userService *UserService) Login(loginRequest *requests.LoginRequest) (*tok
 	}
 
 	return tokens, nil
+}
+
+func (userService *UserService) GetUserFromAuthHeader(authHeader string) (*userModel.User, *errors.TypedError) {
+	_, claims, err := helpers.VerifyAuthHeaderAccessToken(authHeader)
+	if err != nil {
+		return nil, &errors.TypedError{
+			Error:   errors.UnauthorizedErr,
+			Field:   "",
+			Message: errors.UnauthorizedErr.Error(),
+		}
+	}
+
+	userID := claims.Subject
+	user, err := userService.userRepository.GetUserByUsername(userID)
+	if err != nil {
+		switch err {
+		case gorm.ErrRecordNotFound:
+			return nil, &errors.TypedError{
+				Error:   errors.UnauthorizedErr,
+				Field:   "",
+				Message: "incorrect username or password",
+			}
+		default:
+			return nil, &errors.TypedError{
+				Error:   errors.InternalServerErr,
+				Field:   "userID",
+				Message: fmt.Sprintf("cannot get the user from the database: %s", err.Error()),
+			}
+		}
+	}
+
+	return user, nil
 }
