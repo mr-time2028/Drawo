@@ -14,10 +14,10 @@ const (
 
 type Room struct {
 	gorm.Model
-	ID           string       `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()"`
-	Name         string       `gorm:"size:255;not null"`
-	IdentifierID string       `gorm:"not null"`
-	Identifier   *models.User `gorm:"foreignKey:IdentifierID;constraint:OnDelete:CASCADE;not null"`
+	ID           string `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()"`
+	Name         string `gorm:"size:255;not null"`
+	IdentifierID string
+	Identifier   *models.User `gorm:"foreignKey:IdentifierID;constraint:OnDelete:CASCADE"`
 	Password     string       `gorm:"size:60"`
 	Type         RoomType     `gorm:"size:30;not null"`
 }

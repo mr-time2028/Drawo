@@ -141,7 +141,7 @@ func (userService *UserService) GetUserFromAuthHeader(authHeader string) (*userM
 	}
 
 	userID := claims.Subject
-	user, err := userService.userRepository.GetUserByUsername(userID)
+	user, err := userService.userRepository.GetUserByID(userID)
 	if err != nil {
 		switch err {
 		case gorm.ErrRecordNotFound:

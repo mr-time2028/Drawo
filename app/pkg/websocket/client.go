@@ -14,10 +14,6 @@ type Client struct {
 	Message  chan *Message
 }
 
-func NewClient(conn *websocket.Conn) *Client {
-	return &Client{}
-}
-
 func (c *Client) ReadMessage() {
 	defer func() {
 		c.Hub.Unregister <- c

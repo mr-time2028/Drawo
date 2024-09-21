@@ -39,6 +39,9 @@ func (h *Hub) Run() {
 				if _, ok = r.Clients[client.ID]; !ok {
 					r.Clients[client.ID] = client // add client to the room if client not in the room
 				}
+			} else {
+				// create room
+
 			}
 		case client := <-h.Unregister:
 			// check if room exists

@@ -4,7 +4,9 @@ import (
 	"drawo/internal/modules/room/requests"
 	roomService "drawo/internal/modules/room/services"
 	userService "drawo/internal/modules/user/services"
+	"drawo/pkg/config"
 	"drawo/pkg/errors"
+	"drawo/pkg/websocket"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -45,5 +47,24 @@ func (controller *Controller) CreatePrivateRoom(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("room with id %s created successfully", newRoom.ID)})
+	// get hub
+	hub := websocket.GetHub()
+
+	// add new room to hub
+	room := &websocket.Room{
+		ID:           newRoom.ID,
+		Name:         newRoom.Name,
+		IdentifierID: user.ID,
+		Password:     newRoom.Password,
+		Clients:      map[string]*websocket.Client{},
+	}
+
+	hub.Rooms[newRoom.ID] = room
+
+	fmt.Println(hub.Rooms)
+
+	config.SetConfig()
+	cfg := config.GetConfig()
+	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s/rooms/join_room?room_id=%s",
+		cfg.App.Domain, newRoom.ID)})
 }

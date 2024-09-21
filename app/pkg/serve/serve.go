@@ -5,6 +5,7 @@ import (
 	"drawo/pkg/config"
 	"drawo/pkg/database"
 	"drawo/pkg/static"
+	"drawo/pkg/websocket"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -36,6 +37,11 @@ func Serve() {
 
 	// load static files
 	static.LoadStatic(GetRouter())
+
+	// start ws hub
+	websocket.NewHub()
+	hub := websocket.GetHub()
+	go hub.Run()
 
 	// start application
 	err := GetRouter().Run(fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port))

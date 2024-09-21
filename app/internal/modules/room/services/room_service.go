@@ -38,10 +38,10 @@ func (roomService *RoomService) CreatePrivateRoom(
 
 	// create room with user id and hashed password
 	room := &roomModel.Room{
-		Name:       roomRequest.Name,
-		Identifier: identifier,
-		Password:   string(hashedPassword),
-		Type:       roomModel.Private,
+		Name:         roomRequest.Name,
+		IdentifierID: identifier.ID,
+		Password:     string(hashedPassword),
+		Type:         roomModel.Private,
 	}
 	newRoom, err := roomService.roomRepository.InsertOneRoom(room)
 	if err != nil {

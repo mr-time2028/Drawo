@@ -9,9 +9,9 @@ import (
 type Message struct {
 	gorm.Model
 	SenderID  string            `gorm:"not null"`
-	Sender    *userModel.User   `gorm:"foreignKey:SenderID;constraint:OnDelete:CASCADE;not null"`
+	Sender    *userModel.User   `gorm:"foreignKey:SenderID;constraint:OnDelete:CASCADE"`
 	Receivers []*userModel.User `gorm:"many2many:message_receivers;"`
-	RoomID    string            `gorm:"not null"`
-	Room      *roomModel.Room   `gorm:"foreignKey:RoomID;constraint:OnDelete:CASCADE;not null"`
-	Content   string            `gorm:"size:5000;not null"`
+	RoomID    string
+	Room      *roomModel.Room `gorm:"foreignKey:RoomID;constraint:OnDelete:CASCADE"`
+	Content   string          `gorm:"size:5000;not null"`
 }
