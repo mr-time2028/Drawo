@@ -11,4 +11,5 @@ type UserServiceInterface interface {
 	Register(registerRequest *requests.RegisterRequest) (*userModel.User, *errors.TypedError)
 	Login(loginRequest *requests.LoginRequest) (*tokenModel.JWTTokenPairs, *errors.TypedError)
 	GetUserFromAuthHeader(authHeader string) (*userModel.User, *errors.TypedError)
+	GetUserFromAccessToken(accessToken string) (*userModel.User, *errors.TypedError)
 }

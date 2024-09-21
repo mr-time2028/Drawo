@@ -40,7 +40,7 @@ func (h *Hub) Run() {
 					r.Clients[client.ID] = client // add client to the room if client not in the room
 				}
 			} else {
-				// create room
+				// return err
 
 			}
 		case client := <-h.Unregister:

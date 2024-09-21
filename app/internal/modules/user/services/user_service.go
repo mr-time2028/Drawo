@@ -161,3 +161,35 @@ func (userService *UserService) GetUserFromAuthHeader(authHeader string) (*userM
 
 	return user, nil
 }
+
+func (userService *UserService) GetUserFromAccessToken(accessToken string) (*userModel.User, *errors.TypedError) {
+	claims, err := helpers.VerifyAccessToken(accessToken)
+	if err != nil {
+		return nil, &errors.TypedError{
+			Error:   errors.UnauthorizedErr,
+			Field:   "",
+			Message: errors.UnauthorizedErr.Error(),
+		}
+	}
+
+	userID := claims.Subject
+	user, err := userService.userRepository.GetUserByID(userID)
+	if err != nil {
+		switch err {
+		case gorm.ErrRecordNotFound:
+			return nil, &errors.TypedError{
+				Error:   errors.UnauthorizedErr,
+				Field:   "",
+				Message: "incorrect username or password",
+			}
+		default:
+			return nil, &errors.TypedError{
+				Error:   errors.InternalServerErr,
+				Field:   "userID",
+				Message: fmt.Sprintf("cannot get the user from the database: %s", err.Error()),
+			}
+		}
+	}
+
+	return user, nil
+}

@@ -68,3 +68,43 @@ func (controller *Controller) CreatePrivateRoom(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s/rooms/join_room?room_id=%s",
 		cfg.App.Domain, newRoom.ID)})
 }
+
+func (controller *Controller) JoinRoom(c *gin.Context) {
+	var joinRoomRequest struct {
+		Token  string `json:"token"`
+		RoomID string `json:"room_id"`
+	}
+
+	// get user from token
+	user, tErr := controller.UserService.GetUserFromAccessToken(joinRoomRequest.Token)
+	if tErr != nil {
+		status, message := errors.HandleTypedError(tErr)
+		c.JSON(status, message)
+		return
+	}
+
+	// get hub
+	hub := websocket.GetHub()
+
+	// add user to the room
+	conn, err := websocket.UpgradeConnection.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "internal server error"})
+		fmt.Println("internal server error", ":", err.Error())
+		return
+	}
+
+	client := &websocket.Client{
+		ID:       user.ID,
+		Username: user.Username,
+		RoomID:   joinRoomRequest.RoomID,
+		Conn:     conn,
+		Hub:      hub,
+		Message:  make(chan *websocket.Message),
+	}
+
+	hub.Register <- client
+
+	go client.ReadMessage()
+	go client.WriteMessage()
+}
