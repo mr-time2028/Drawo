@@ -2,6 +2,6 @@ package config
 
 import "drawo/config"
 
-func GetConfig() config.Config {
+func Get() config.Config {
 	return configurations
 }

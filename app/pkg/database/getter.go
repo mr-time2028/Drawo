@@ -2,6 +2,6 @@ package database
 
 import "gorm.io/gorm"
 
-func GetDB() *gorm.DB {
+func Get() *gorm.DB {
 	return DB
 }

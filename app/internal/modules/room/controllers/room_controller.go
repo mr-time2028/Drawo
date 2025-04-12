@@ -64,7 +64,7 @@ func (controller *Controller) CreatePrivateRoom(c *gin.Context) {
 	fmt.Println(hub.Rooms)
 
 	config.SetConfig()
-	cfg := config.GetConfig()
+	cfg := config.Get()
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s/rooms/join_room?room_id=%s",
 		cfg.App.Domain, newRoom.ID)})
 }

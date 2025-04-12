@@ -12,7 +12,7 @@ import (
 func Migrate() {
 	// connect to the database
 	database.Connect()
-	db := database.GetDB()
+	db := database.Get()
 
 	// create ossp extension
 	result := db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")

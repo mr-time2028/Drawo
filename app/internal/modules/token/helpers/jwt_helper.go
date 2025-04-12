@@ -12,7 +12,7 @@ import (
 
 func GenerateTokenPair(ju *models.JwtUser) (*models.JWTTokenPairs, error) {
 	config.SetConfig()
-	cfg := config.GetConfig()
+	cfg := config.Get()
 
 	issuer := cfg.Auth.Issuer
 	audience := cfg.Auth.Audience
@@ -60,7 +60,7 @@ func GenerateTokenPair(ju *models.JwtUser) (*models.JWTTokenPairs, error) {
 
 func ParseWithClaims(token string) (*models.JWTClaims, error) {
 	config.SetConfig()
-	cfg := config.GetConfig()
+	cfg := config.Get()
 
 	secretKey := cfg.App.SecretKey
 	issuer := cfg.Auth.Issuer

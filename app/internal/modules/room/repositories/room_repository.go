@@ -12,7 +12,7 @@ type RoomRepository struct {
 
 func New() *RoomRepository {
 	return &RoomRepository{
-		DB: database.GetDB(),
+		DB: database.Get(),
 	}
 }
 

@@ -13,7 +13,7 @@ type UserRepository struct {
 
 func New() *UserRepository {
 	return &UserRepository{
-		DB: database.GetDB(),
+		DB: database.Get(),
 	}
 }
 

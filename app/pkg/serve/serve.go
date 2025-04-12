@@ -4,39 +4,30 @@ import (
 	"drawo/internal/routes"
 	"drawo/pkg/config"
 	"drawo/pkg/database"
+	"drawo/pkg/routing"
 	"drawo/pkg/static"
 	"drawo/pkg/websocket"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"log"
 )
-
-var router *gin.Engine
-
-func Init() {
-	router = gin.Default()
-}
-
-func GetRouter() *gin.Engine {
-	return router
-}
 
 func Serve() {
 	// initial configs
 	config.SetConfig()
-	cfg := config.GetConfig()
+	cfg := config.Get()
 
 	// connect to the database
 	database.Connect()
 
 	// initial router
-	Init()
+	routing.Init()
+	router := routing.Get()
 
 	// register routes
 	routes.RegisterRoutes(router)
 
 	// load static files
-	static.LoadStatic(GetRouter())
+	static.LoadStatic(router)
 
 	// start ws hub
 	websocket.NewHub()
@@ -44,7 +35,7 @@ func Serve() {
 	go hub.Run()
 
 	// start application
-	err := GetRouter().Run(fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port))
+	err := router.Run(fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port))
 	if err != nil {
 		log.Fatal("Failed to serve the application")
 	}
