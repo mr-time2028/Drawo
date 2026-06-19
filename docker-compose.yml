@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   nginx:
     container_name: 'drawo_nginx'
@@ -31,7 +29,7 @@ services:
 
   postgres:
     container_name: 'drawo_postgres'
-    image: postgres
+    image: postgres:17
     ports:
       - '5432:5432'
     volumes:
