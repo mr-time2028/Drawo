@@ -2,13 +2,16 @@ package models
 
 import (
 	"gorm.io/gorm"
+	"time"
 )
 
 type User struct {
-	gorm.Model
-	ID          string `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()"`
-	Username    string `gorm:"size:255;not null"`
-	Password    string `gorm:"size:60;not null"`
-	IsActive    bool   `gorm:"default:false"`
-	IsSuperuser bool   `gorm:"default:false"`
+	ID          string `gorm:"type:uuid;primaryKey"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   gorm.DeletedAt `gorm:"index"`
+	Username    string
+	Password    string
+	IsActive    bool
+	IsSuperuser bool
 }

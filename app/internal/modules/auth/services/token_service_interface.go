@@ -1,7 +1,7 @@
 package services
 
 import (
-	tokenModel "drawo/internal/modules/token/models"
+	tokenModel "drawo/internal/modules/auth/models"
 	"drawo/pkg/errors"
 )
 

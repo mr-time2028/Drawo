@@ -1,8 +1,8 @@
 package services
 
 import (
-	"drawo/internal/modules/token/helpers"
-	tokenModel "drawo/internal/modules/token/models"
+	"drawo/internal/modules/auth/helpers"
+	tokenModel "drawo/internal/modules/auth/models"
 	userHelper "drawo/internal/modules/user/helpers"
 	userModel "drawo/internal/modules/user/models"
 	"drawo/internal/modules/user/repositories"

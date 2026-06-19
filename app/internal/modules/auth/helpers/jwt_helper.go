@@ -1,8 +1,8 @@
 package helpers
 
 import (
-	"drawo/internal/modules/token/models"
-	"drawo/pkg/config"
+	config2 "drawo/config"
+	"drawo/internal/modules/auth/models"
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
@@ -11,8 +11,8 @@ import (
 )
 
 func GenerateTokenPair(ju *models.JwtUser) (*models.JWTTokenPairs, error) {
-	config.SetConfig()
-	cfg := config.Get()
+	config2.SetConfig()
+	cfg := config2.Get()
 
 	issuer := cfg.Auth.Issuer
 	audience := cfg.Auth.Audience
@@ -59,8 +59,8 @@ func GenerateTokenPair(ju *models.JwtUser) (*models.JWTTokenPairs, error) {
 }
 
 func ParseWithClaims(token string) (*models.JWTClaims, error) {
-	config.SetConfig()
-	cfg := config.Get()
+	config2.SetConfig()
+	cfg := config2.Get()
 
 	secretKey := cfg.App.SecretKey
 	issuer := cfg.Auth.Issuer

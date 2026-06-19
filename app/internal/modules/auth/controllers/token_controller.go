@@ -1,8 +1,8 @@
 package controllers
 
 import (
-	"drawo/internal/modules/token/requests"
-	"drawo/internal/modules/token/services"
+	"drawo/internal/modules/auth/requests"
+	"drawo/internal/modules/auth/services"
 	"drawo/pkg/errors"
 	"github.com/gin-gonic/gin"
 	"net/http"

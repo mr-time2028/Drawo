@@ -2,8 +2,8 @@ package routes
 
 import (
 	"drawo/internal/middlewares"
+	tokenRoutes "drawo/internal/modules/auth/routes"
 	roomRoutes "drawo/internal/modules/room/routes"
-	tokenRoutes "drawo/internal/modules/token/routes"
 	userRoutes "drawo/internal/modules/user/routes"
 	"github.com/gin-gonic/gin"
 )

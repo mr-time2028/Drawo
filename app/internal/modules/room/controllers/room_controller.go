@@ -1,10 +1,10 @@
 package controllers
 
 import (
+	config2 "drawo/config"
 	"drawo/internal/modules/room/requests"
 	roomService "drawo/internal/modules/room/services"
 	userService "drawo/internal/modules/user/services"
-	"drawo/pkg/config"
 	"drawo/pkg/errors"
 	"drawo/pkg/websocket"
 	"fmt"
@@ -63,8 +63,8 @@ func (controller *Controller) CreatePrivateRoom(c *gin.Context) {
 
 	fmt.Println(hub.Rooms)
 
-	config.SetConfig()
-	cfg := config.Get()
+	config2.SetConfig()
+	cfg := config2.Get()
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s/rooms/join_room?room_id=%s",
 		cfg.App.Domain, newRoom.ID)})
 }

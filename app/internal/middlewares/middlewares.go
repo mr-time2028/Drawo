@@ -1,7 +1,7 @@
 package middlewares
 
 import (
-	"drawo/internal/modules/token/helpers"
+	"drawo/internal/modules/auth/helpers"
 	"drawo/pkg/errors"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"

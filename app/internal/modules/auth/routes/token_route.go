@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"drawo/internal/modules/token/controllers"
+	"drawo/internal/modules/auth/controllers"
 	"github.com/gin-gonic/gin"
 )
 

@@ -1,7 +1,7 @@
 package database
 
 import (
-	"drawo/pkg/config"
+	config2 "drawo/config"
 	"fmt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -11,8 +11,8 @@ import (
 var DB *gorm.DB
 
 func Connect() {
-	config.SetConfig()
-	cfg := config.Get()
+	config2.SetConfig()
+	cfg := config2.Get()
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Tehran",
 		cfg.DB.Host,

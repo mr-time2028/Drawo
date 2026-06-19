@@ -2,6 +2,7 @@ app:
   name: ""
   domain: ""
   secretKey: ""
+  migrationsPath: ""
 
 server:
   host: ""
