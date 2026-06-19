@@ -1,6 +1,6 @@
 package config
 
-import "drawo/config"
+import config "drawo/config"
 
 func Get() config.Config {
 	return configurations

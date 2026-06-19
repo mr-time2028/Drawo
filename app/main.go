@@ -1,6 +1,8 @@
 package main
 
-import "drawo/cmd"
+import (
+	"drawo/cmd"
+)
 
 func main() {
 	cmd.Execute()

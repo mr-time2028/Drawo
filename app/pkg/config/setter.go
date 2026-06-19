@@ -11,6 +11,16 @@ var configurations config.Config
 func SetConfig() {
 	// defaults
 	viper.SetDefault("app.name", "Drawo")
+	viper.SetDefault(
+		"app.modules",
+		[]string{
+			"user",
+			"token",
+			"room",
+			"message",
+		},
+	)
+	viper.SetDefault("app.migrationsPath", "migrations")
 
 	viper.SetDefault("server.host", "localhost")
 	viper.SetDefault("server.port", "8080")

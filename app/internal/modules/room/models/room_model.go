@@ -2,7 +2,6 @@ package models
 
 import (
 	"drawo/internal/modules/user/models"
-	"gorm.io/gorm"
 )
 
 type RoomType string
@@ -13,7 +12,6 @@ const (
 )
 
 type Room struct {
-	gorm.Model
 	ID           string `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()"`
 	Name         string `gorm:"size:255;not null"`
 	IdentifierID string

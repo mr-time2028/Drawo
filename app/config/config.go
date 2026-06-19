@@ -10,9 +10,11 @@ type Config struct {
 }
 
 type App struct {
-	Name      string
-	Domain    string
-	SecretKey string
+	Name           string
+	Domain         string
+	SecretKey      string
+	Modules        []string
+	MigrationsPath string
 }
 
 type Server struct {
