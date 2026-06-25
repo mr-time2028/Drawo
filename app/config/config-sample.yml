@@ -1,0 +1,22 @@
+app:
+  name: ""
+  domain: ""
+  secretKey: ""
+  migrationsPath: ""
+
+server:
+  host: ""
+  port: ""
+
+db:
+  name: ""
+  user: ""
+  pass: ""
+  host: ""
+  port: ""
+
+auth:
+  issuer: ""
+  audience: ""
+  accessExpiry:
+  refreshExpiry:
