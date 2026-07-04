@@ -1,44 +1,82 @@
+# Production Compose file.
+#
+# Responsibility:
+#   - Run the full Drawo stack: nginx, Go app, PostgreSQL, Redis.
+#   - Use multi-stage Docker builds and health checks.
+#
+# Usage:
+#   make prod-up
+
 services:
   nginx:
-    container_name: 'drawo_nginx'
+    container_name: drawo_nginx
     build:
       context: ./nginx
       dockerfile: Dockerfile
     ports:
-      - '80:80'
-      - '443:443'
+      - "80:80"
+      - "443:443"
     volumes:
       - assets:/app/assets
       - media:/app/media
     depends_on:
-      - app
+      app:
+        condition: service_healthy
 
   app:
-    container_name: 'drawo_app'
+    container_name: drawo_app
     build:
-      context: .
-      dockerfile: app/Dockerfile
+      context: ./app
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     volumes:
       - assets:/app/assets
       - media:/app/media
-    restart: always
+    environment:
+      DRAWO_SERVER_HOST: 0.0.0.0
+      DRAWO_SERVER_PORT: 8080
+      DRAWO_DATABASE_HOST: postgres
+      DRAWO_DATABASE_PORT: 5432
+      DRAWO_DATABASE_NAME: drawo
+      DRAWO_DATABASE_USER: postgres
+      DRAWO_DATABASE_PASSWORD: 123456
+      DRAWO_REDIS_HOST: redis
+      DRAWO_REDIS_PORT: 6379
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
-    container_name: 'drawo_postgres'
-    image: postgres:17
-    ports:
-      - '5432:5432'
+    container_name: drawo_postgres
+    image: postgres:17-alpine
     volumes:
-      - postgres-data:/var/lib/data/postgresql
-    restart: always
+      - postgres-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=drawo
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=123456
+      POSTGRES_DB: drawo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d drawo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: drawo_redis
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres-data:

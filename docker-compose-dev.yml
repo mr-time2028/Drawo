@@ -1,15 +1,40 @@
+# Development Compose file.
+#
+# Responsibility:
+#   - Run only the backing services (PostgreSQL, Redis) in Docker.
+#   - Let the Go app run locally for fast rebuilds and debugger attachment.
+#
+# Usage:
+#   make dev-up
+#   cd app && go run . serve
 services:
   postgres:
-    container_name: 'dev_drawo_postgres'
-    image: postgres:17
+    container_name: dev_drawo_postgres
+    image: postgres:17-alpine
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/data/postgresql
+      - postgres-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=drawo
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=123456
+      POSTGRES_DB: drawo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d drawo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: dev_drawo_redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres-data:
