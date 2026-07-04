@@ -18,6 +18,7 @@ type Config struct {
 	App      AppConfig      `mapstructure:"app"`
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
+	Cache    CacheConfig    `mapstructure:"cache"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Auth     AuthConfig     `mapstructure:"auth"`
 	Log      LogConfig      `mapstructure:"log"`
@@ -38,8 +39,9 @@ type ServerConfig struct {
 	Port string `mapstructure:"port"`
 }
 
-// DatabaseConfig contains PostgreSQL connection details.
+// DatabaseConfig contains relational database connection details.
 type DatabaseConfig struct {
+	Driver   string `mapstructure:"driver"`
 	Host     string `mapstructure:"host"`
 	Port     string `mapstructure:"port"`
 	Name     string `mapstructure:"name"`
@@ -48,8 +50,18 @@ type DatabaseConfig struct {
 	SSLMode  string `mapstructure:"sslMode"`
 }
 
-// RedisConfig contains Redis connection details.
+// CacheConfig contains non-relational database / caching layer connection details.
+type CacheConfig struct {
+	Driver   string `mapstructure:"driver"`
+	Host     string `mapstructure:"host"`
+	Port     string `mapstructure:"port"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+}
+
+// RedisConfig contains Redis connection details for backward compatibility.
 type RedisConfig struct {
+	Driver   string `mapstructure:"driver"`
 	Host     string `mapstructure:"host"`
 	Port     string `mapstructure:"port"`
 	Password string `mapstructure:"password"`
@@ -58,13 +70,13 @@ type RedisConfig struct {
 
 // AuthConfig contains JWT and security settings.
 type AuthConfig struct {
-	Issuer                string        `mapstructure:"issuer"`
-	Audience              string        `mapstructure:"audience"`
-	AccessTokenExpiry     time.Duration `mapstructure:"accessTokenExpiry"`
-	RefreshTokenExpiry    time.Duration `mapstructure:"refreshTokenExpiry"`
-	MaxLoginAttempts      int           `mapstructure:"maxLoginAttempts"`
-	LoginLockoutDuration  time.Duration `mapstructure:"loginLockoutDuration"`
-	RefreshTokenFamilySize int          `mapstructure:"refreshTokenFamilySize"`
+	Issuer                 string        `mapstructure:"issuer"`
+	Audience               string        `mapstructure:"audience"`
+	AccessTokenExpiry      time.Duration `mapstructure:"accessTokenExpiry"`
+	RefreshTokenExpiry     time.Duration `mapstructure:"refreshTokenExpiry"`
+	MaxLoginAttempts       int           `mapstructure:"maxLoginAttempts"`
+	LoginLockoutDuration   time.Duration `mapstructure:"loginLockoutDuration"`
+	RefreshTokenFamilySize int           `mapstructure:"refreshTokenFamilySize"`
 }
 
 // LogConfig contains logging settings.

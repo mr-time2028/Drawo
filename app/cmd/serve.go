@@ -31,14 +31,14 @@ func serve() error {
 	}
 	cfg := config.Get()
 
-	// Initialize the dependency container. This also opens DB and Redis.
+	// Initialize the dependency container. This also opens DB and cache store.
 	container, err := di.NewContainer(cfg)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if container.Redis != nil {
-			_ = container.Redis.Close()
+		if container.Cache != nil {
+			_ = container.Cache.Close()
 		}
 	}()
 

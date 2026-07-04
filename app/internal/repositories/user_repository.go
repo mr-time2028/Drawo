@@ -1,7 +1,7 @@
 // Package repositories contains concrete persistence implementations.
 //
 // Each repository implements one port from internal/core/ports using a specific
-// technology (GORM for PostgreSQL, go-redis for cache, etc.).
+// technology (GORM for relational databases, Redis/memory adapters for cache, etc.).
 package repositories
 
 import (

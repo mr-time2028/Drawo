@@ -18,7 +18,7 @@ import (
 //   3. Built-in defaults
 //
 // The .env file is optional in production (env vars can be injected directly),
-// but required in development so the app knows where Postgres and Redis are.
+// but required in development so the app knows where backing services are.
 func Load() error {
 	setDefaults()
 
@@ -33,6 +33,12 @@ func Load() error {
 
 	if err := viper.Unmarshal(&configurations); err != nil {
 		return fmt.Errorf("unmarshal config: %w", err)
+	}
+
+	// Backwards compatibility: if cache configuration matches defaults but redis configuration was explicitly set,
+	// mirror redis config to cache config.
+	if configurations.Cache.Host == "localhost" && configurations.Redis.Host != "localhost" {
+		configurations.Cache = CacheConfig(configurations.Redis)
 	}
 
 	return nil

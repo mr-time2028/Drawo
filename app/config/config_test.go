@@ -34,7 +34,10 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "Drawo", cfg.App.Name)
 	assert.Equal(t, "0.0.0.0", cfg.Server.Host)
 	assert.Equal(t, "8080", cfg.Server.Port)
+	assert.Equal(t, "postgres", cfg.Database.Driver)
 	assert.Equal(t, "drawo", cfg.Database.Name)
+	assert.Equal(t, "redis", cfg.Cache.Driver)
+	assert.Equal(t, "localhost", cfg.Cache.Host)
 	assert.Equal(t, "localhost", cfg.Redis.Host)
 	assert.Equal(t, 15*time.Minute, cfg.Auth.AccessTokenExpiry)
 }
@@ -44,6 +47,8 @@ func TestLoadEnvOverride(t *testing.T) {
 	resetEnv(t)
 	t.Setenv("DRAWO_SERVER_PORT", "9999")
 	t.Setenv("DRAWO_APP_NAME", "TestDrawo")
+	t.Setenv("DRAWO_DATABASE_DRIVER", "sqlite")
+	t.Setenv("DRAWO_CACHE_DRIVER", "memory")
 
 	err := Load()
 	require.NoError(t, err)
@@ -51,6 +56,8 @@ func TestLoadEnvOverride(t *testing.T) {
 	cfg := Get()
 	assert.Equal(t, "9999", cfg.Server.Port)
 	assert.Equal(t, "TestDrawo", cfg.App.Name)
+	assert.Equal(t, "sqlite", cfg.Database.Driver)
+	assert.Equal(t, "memory", cfg.Cache.Driver)
 }
 
 // TestLoadDotEnv verifies that a .env file is loaded and overrides defaults.

@@ -1,6 +1,6 @@
 # Drawo
 
-A production-quality multiplayer drawing game inspired by Skribbl.io.
+A production-quality multiplayer drawing and guessing game.
 
 ## Quick start (development)
 

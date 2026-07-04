@@ -1,7 +1,7 @@
 // Package di wires the application's dependencies together.
 //
 // Responsibility:
-//   - Construct infrastructure components (DB, Redis, logger).
+//   - Construct infrastructure components (DB, non-relational cache/store, logger).
 //   - Construct repositories and services.
 //   - Expose a single container that HTTP handlers can depend on.
 //
@@ -9,10 +9,6 @@
 //   Without DI, services create their own repositories with `repository.New()`.
 //   That makes unit testing impossible and hides dependencies. With a container,
 //   every dependency is explicit and can be replaced (e.g., with a mock).
-//
-// Pattern:
-//   This is a simple manual DI container. For a larger project we could use
-//   wire or fx, but manual wiring is easier to read and debug while learning Go.
 package di
 
 import (
@@ -20,8 +16,8 @@ import (
 
 	"drawo/config"
 	"drawo/internal/core/ports"
+	"drawo/internal/infrastructure/cache"
 	"drawo/internal/infrastructure/database"
-	"drawo/internal/infrastructure/redis"
 	"drawo/internal/repositories"
 	"drawo/internal/services"
 	"drawo/pkg/logger"
@@ -34,7 +30,7 @@ import (
 type Container struct {
 	Config   config.Config
 	DB       *database.Connection
-	Redis    *redis.Client
+	Cache    ports.CacheRepository
 	Services Services
 }
 
@@ -53,7 +49,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 		return nil, err
 	}
 
-	redisClient, err := redis.NewClient(cfg.Redis)
+	cacheClient, err := cache.NewClient(cfg.Cache)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +66,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	return &Container{
 		Config: cfg,
 		DB:     dbConn,
-		Redis:  redisClient,
+		Cache:  cacheClient,
 		Services: Services{
 			Auth: services.NewAuthService(),
 			User: services.NewUserService(),
@@ -83,6 +79,6 @@ func (c *Container) Health() map[string]error {
 	ctx := context.Background()
 	return map[string]error{
 		"database": c.DB.Health(ctx),
-		"redis":    c.Redis.Health(ctx),
+		"cache":    c.Cache.Health(ctx),
 	}
 }

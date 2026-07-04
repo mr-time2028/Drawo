@@ -10,7 +10,7 @@ import (
 //
 // Defaults are overridden by (in order of precedence):
 //   1. Environment variables (e.g., DRAWO_SERVER_PORT)
-//   2. config/.config.yml
+//   2. .env file
 //   3. Explicit values set in tests before calling Load()
 //
 // We use the mapstructure keys here because Viper binds env vars to those keys.
@@ -27,6 +27,7 @@ func setDefaults() {
 	viper.SetDefault("server.port", "8080")
 
 	// Database
+	viper.SetDefault("database.driver", "postgres")
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", "5432")
 	viper.SetDefault("database.name", "drawo")
@@ -34,7 +35,15 @@ func setDefaults() {
 	viper.SetDefault("database.password", "123456")
 	viper.SetDefault("database.sslMode", "disable")
 
-	// Redis
+	// Cache (abstracted non-relational storage)
+	viper.SetDefault("cache.driver", "redis")
+	viper.SetDefault("cache.host", "localhost")
+	viper.SetDefault("cache.port", "6379")
+	viper.SetDefault("cache.password", "")
+	viper.SetDefault("cache.db", 0)
+
+	// Redis (backward compatibility)
+	viper.SetDefault("redis.driver", "redis")
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", "6379")
 	viper.SetDefault("redis.password", "")

@@ -25,8 +25,8 @@ type contextKey string
 const requestIDKey contextKey = "request_id"
 const userIDKey contextKey = "user_id"
 
-// L is the global logger. It is set by Init() and is safe for concurrent use.
-var L *slog.Logger
+// L is the global logger. It defaults to slog.Default() and is reconfigured by Init(). Safe for concurrent use.
+var L *slog.Logger = slog.Default()
 
 // Init creates the global logger from configuration.
 // It should be called once before the server starts.
