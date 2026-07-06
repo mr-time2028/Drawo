@@ -27,6 +27,13 @@ type UserService interface {
 	UpdateProfile(ctx context.Context, userID string, updates domain.Profile) (*domain.Profile, error)
 }
 
+// RoomService defines application use cases for ephemeral room creation and discovery.
+type RoomService interface {
+	CreateRoom(ctx context.Context, name, ownerID string, roomType domain.RoomType, language string, maxPlayers, roundTime, maxRounds int) (*domain.Room, error)
+	GetRoom(ctx context.Context, roomID string) (*domain.Room, error)
+	JoinByInviteCode(ctx context.Context, inviteCode string) (*domain.Room, error)
+}
+
 // HealthReporter is implemented by any infrastructure component that can report health.
 type HealthReporter interface {
 	Health(ctx context.Context) error

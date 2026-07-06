@@ -105,7 +105,7 @@ We will build the project in **18 phases**. Each phase is a complete, testable m
 - Create a minimal working HTTP server that compiles and passes a smoke test.
 
 ### Phase 2 — Database Schema & Migrations
-- Design full relational schema (users, profiles, rooms, players, games, rounds, drawings, messages, reports, scores, words, categories, languages, achievements, sessions, tokens, settings).
+- Design full relational schema for persistent entities (users, profiles, friendships, friend requests, game history, rounds, scores, reports, achievements, player statistics, user settings). Note: Public and private rooms are ephemeral runtime objects maintained in memory and coordinated via Redis/cache; they are NOT stored in the relational database.
 - Write up/down migrations for every table.
 - Add indexes, foreign keys, and `ON DELETE` rules.
 - Document every relation in `docs/database-schema.md`.

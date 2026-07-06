@@ -10,7 +10,7 @@ const (
 	RoomTypePrivate RoomType = "private"
 )
 
-// RoomState represents the lifecycle of a room.
+// RoomState represents the runtime lifecycle state of an ephemeral room.
 type RoomState string
 
 const (
@@ -20,34 +20,44 @@ const (
 	RoomStateClosed   RoomState = "closed"
 )
 
-// Room is a drawing session container.
+// Room represents an ephemeral, in-memory drawing game session.
 //
-// Why does Room not contain Clients?
-//   Clients are a runtime/transport concern. The domain Room only holds the data
-//   that needs to be persisted. The WebSocket adapter maps Clients to Rooms.
+// DESIGN DECISION:
+//   Rooms (both public and private) are treated strictly as ephemeral runtime objects rather
+//   than persistent relational database entities. A room only exists while players are actively
+//   using it. It is created when the first player creates or joins it, maintained entirely in
+//   memory during gameplay, and automatically destroyed when the game ends or all players leave.
+//
+//   Private rooms generate a unique InviteCode that remains valid only during the room's active
+//   lifecycle and is automatically invalidated upon room destruction.
+//
+//   When scaled across multiple instances, discovery and InviteCode lookups are coordinated
+//   via distributed caching (Redis), while runtime state remains exclusively in memory on the
+//   owning game server instance.
 type Room struct {
 	ID           string
 	Name         string
+	InviteCode   string // Unique invitation code for private rooms; invalidated when room closes
 	OwnerID      string
 	Type         RoomType
-	PasswordHash string // empty for public rooms
+	PasswordHash string // Empty for public rooms
 	Language     string
 	State        RoomState
 	MaxPlayers   int
-	RoundTime    int // seconds
+	RoundTime    int // Seconds per drawing turn
 	MaxRounds    int
+	CurrentRound int
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
 
-// Player is a user participating in a specific room.
-//
-// It bridges User and Room and tracks in-room state (score, role, connection status).
+// Player represents a user participating in a specific ephemeral room.
+// It bridges User and Room and tracks transient in-room state (score, role, online presence).
 type Player struct {
 	ID        string
 	RoomID    string
 	UserID    string
-	Username  string // denormalized to avoid joins in the hot path
+	Username  string // Denormalized to avoid joins during high-frequency gameplay
 	AvatarURL string
 	Score     int64
 	IsDrawer  bool

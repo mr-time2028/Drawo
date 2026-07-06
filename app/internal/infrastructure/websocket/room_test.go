@@ -1,0 +1,102 @@
+package websocket
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"drawo/config"
+	"drawo/internal/core/domain"
+	"drawo/internal/infrastructure/cache"
+	"drawo/internal/repositories"
+)
+
+func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
+	cacheClient, err := cache.NewClient(config.CacheConfig{Driver: "memory"})
+	require.NoError(t, err)
+	defer cacheClient.Close()
+
+	roomRepo := repositories.NewRoomRepo(cacheClient)
+	hub := NewHub(roomRepo)
+	ctx := context.Background()
+
+	state := &domain.Room{
+		ID:         "room-ephemeral-1",
+		Name:       "Goroutine Test Room",
+		InviteCode: "CODE123",
+		Type:       domain.RoomTypePrivate,
+		State:      domain.RoomStatePlaying, // Playing state triggers auto-close when all players leave
+	}
+
+	room, err := hub.CreateRoom(ctx, state)
+	require.NoError(t, err)
+	require.NotNil(t, room)
+
+	// Verify room exists in Hub and discovery storage
+	_, _, err = hub.GetRoom(ctx, "room-ephemeral-1")
+	require.NoError(t, err)
+
+	// Join client 1
+	client1 := &Client{
+		ID:       "c1",
+		Username: "Alice",
+		Send:     make(chan []byte, 20),
+	}
+	err = hub.JoinRoom(ctx, "room-ephemeral-1", client1)
+	require.NoError(t, err)
+
+	// Join client 2
+	client2 := &Client{
+		ID:       "c2",
+		Username: "Bob",
+		Send:     make(chan []byte, 20),
+	}
+	err = hub.JoinRoom(ctx, "room-ephemeral-1", client2)
+	require.NoError(t, err)
+
+	// Allow goroutine to process joins
+	time.Sleep(50 * time.Millisecond)
+
+	// Drain join notifications from client 2 buffer
+	for len(client2.Send) > 0 {
+		<-client2.Send
+	}
+
+	// Client 1 sends a draw stroke event
+	drawEvent := &RoomEvent{
+		Type:      EventDraw,
+		Client:    client1,
+		Payload:   []byte(`{"stroke": [10, 20]}`),
+		Timestamp: time.Now(),
+	}
+	room.Dispatch(drawEvent)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify Client 2 received the draw broadcast envelope
+	require.NotEmpty(t, client2.Send)
+	msg := <-client2.Send
+	var env MessageEnvelope
+	require.NoError(t, json.Unmarshal(msg, &env))
+	assert.Equal(t, EventDraw, env.Type)
+
+	// Client 1 leaves
+	hub.LeaveRoom("room-ephemeral-1", client1)
+	time.Sleep(50 * time.Millisecond)
+
+	// Client 2 leaves (all players gone during Playing state -> goroutine auto-destroys and invalidates invite code)
+	hub.LeaveRoom("room-ephemeral-1", client2)
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify room is removed from local hub map
+	_, _, err = hub.GetRoom(ctx, "room-ephemeral-1")
+	assert.Error(t, err)
+
+	// Verify invite code is automatically invalidated in discovery cache
+	inviteLookup, _ := hub.GetRoomByInviteCode(ctx, "CODE123")
+	assert.Nil(t, inviteLookup)
+}

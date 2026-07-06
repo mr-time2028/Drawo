@@ -1,14 +1,4 @@
 // Package di wires the application's dependencies together.
-//
-// Responsibility:
-//   - Construct infrastructure components (DB, non-relational cache/store, logger).
-//   - Construct repositories and services.
-//   - Expose a single container that HTTP handlers can depend on.
-//
-// Why dependency injection?
-//   Without DI, services create their own repositories with `repository.New()`.
-//   That makes unit testing impossible and hides dependencies. With a container,
-//   every dependency is explicit and can be replaced (e.g., with a mock).
 package di
 
 import (
@@ -18,19 +8,18 @@ import (
 	"drawo/internal/core/ports"
 	"drawo/internal/infrastructure/cache"
 	"drawo/internal/infrastructure/database"
+	"drawo/internal/infrastructure/websocket"
 	"drawo/internal/repositories"
 	"drawo/internal/services"
 	"drawo/pkg/logger"
 )
 
 // Container holds all application dependencies.
-//
-// Controllers receive *Container and pull only what they need.
-// This keeps the constructor signature small and avoids "constructor hell".
 type Container struct {
 	Config   config.Config
 	DB       *database.Connection
 	Cache    ports.CacheRepository
+	Hub      *websocket.Hub
 	Services Services
 }
 
@@ -38,6 +27,7 @@ type Container struct {
 type Services struct {
 	Auth ports.AuthService
 	User ports.UserService
+	Room ports.RoomService
 }
 
 // NewContainer builds the full dependency graph.
@@ -54,22 +44,31 @@ func NewContainer(cfg config.Config) (*Container, error) {
 		return nil, err
 	}
 
-	// Repositories receive the GORM DB handle.
+	// Persistent repositories receive the relational GORM DB handle.
 	userRepo := repositories.NewUserRepo(dbConn.DB)
 	_ = repositories.NewProfileRepo(dbConn.DB)
-	_ = repositories.NewRoomRepo(dbConn.DB)
+	_ = repositories.NewFriendRepo(dbConn.DB)
+	_ = repositories.NewGameHistoryRepo(dbConn.DB)
+	_ = repositories.NewStatsRepo(dbConn.DB)
 
-	// Services receive repositories. Currently they are placeholders.
-	// In later phases we will inject real repositories into real services.
+	// Ephemeral room discovery repository receives the non-relational CacheRepository.
+	roomRepo := repositories.NewRoomRepo(cacheClient)
+
+	// WebSocket Hub manages active room goroutines locally and coordinates via roomRepo.
+	hub := websocket.NewHub(roomRepo)
+
+	// Suppress unused warning while placeholder auth/user services are wired in later phases.
 	_ = userRepo
 
 	return &Container{
 		Config: cfg,
 		DB:     dbConn,
 		Cache:  cacheClient,
+		Hub:    hub,
 		Services: Services{
 			Auth: services.NewAuthService(),
 			User: services.NewUserService(),
+			Room: services.NewRoomService(roomRepo),
 		},
 	}, nil
 }
