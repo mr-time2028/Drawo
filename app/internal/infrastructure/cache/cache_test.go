@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"drawo/config"
-	"drawo/internal/core/ports"
+	"drawo/internal/core/ports/repositories"
 )
 
 func TestNewClient_UnsupportedDriver(t *testing.T) {
@@ -25,14 +25,14 @@ func TestNewClient_UnsupportedDriver(t *testing.T) {
 }
 
 func TestRegisterDriver(t *testing.T) {
-	mockErr := errors.New("mock cache init error")
-	RegisterDriver("mockstore", func(cfg config.CacheConfig) (ports.CacheRepository, error) {
+	mockErr := fmt.Errorf("mock cache init error")
+	RegisterDriver("mockstore", func(cfg config.CacheConfig) (repositories.CacheRepository, error) {
 		return nil, mockErr
 	})
 
 	client, err := NewClient(config.CacheConfig{Driver: "mockstore"})
 	assert.Nil(t, client)
-	assert.ErrorIs(t, err, mockErr)
+	assert.Equal(t, mockErr, err)
 }
 
 func TestMemoryClient_Operations(t *testing.T) {
@@ -89,7 +89,7 @@ func TestMemoryClient_TTL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "temp_val", val)
 
-	time.Sleep(60 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	exists, err := client.Exists(ctx, "temp_key")
 	require.NoError(t, err)

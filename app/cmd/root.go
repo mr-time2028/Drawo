@@ -10,12 +10,17 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"drawo/config"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "drawo",
 	Short: "Drawo multiplayer drawing game server",
 	Long:  "Drawo is a production-quality multiplayer drawing game built with Go.",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return config.Load()
+	},
 }
 
 // Execute runs the root command.

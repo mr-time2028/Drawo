@@ -1,44 +1,35 @@
-// Package cache provides non-relational database connectivity for caching, sessions, and real-time coordination.
-//
-// Responsibility:
-//   - Provide a factory registry so switching between caching/non-relational stores (Redis, in-memory, etc.)
-//     requires minimal code changes and no technology-specific logic leaking into services or controllers.
-//   - Return implementations of ports.CacheRepository based on configuration.
 package cache
 
 import (
 	"fmt"
-	"strings"
 
 	"drawo/config"
-	"drawo/internal/core/ports"
+	"drawo/internal/core/ports/repositories"
 )
 
-// Factory creates a ports.CacheRepository given a cache configuration.
-type Factory func(cfg config.CacheConfig) (ports.CacheRepository, error)
+type Driver func(cfg config.CacheConfig) (repositories.CacheRepository, error)
 
-var factories = map[string]Factory{
-	"redis":  NewRedisClient,
-	"memory": NewMemoryClient,
+var drivers = make(map[string]Driver)
+
+func RegisterDriver(name string, driver Driver) {
+	drivers[name] = driver
 }
 
-// RegisterDriver registers a custom Factory for a non-relational / cache driver name
-// (e.g., "memcached"). This allows extending caching support without modifying core logic.
-func RegisterDriver(name string, factory Factory) {
-	factories[strings.ToLower(name)] = factory
-}
-
-// NewClient creates a ports.CacheRepository from configuration using the configured driver.
-func NewClient(cfg config.CacheConfig) (ports.CacheRepository, error) {
-	driver := strings.ToLower(cfg.Driver)
-	if driver == "" {
-		driver = "redis"
-	}
-
-	factory, ok := factories[driver]
+func NewClient(cfg config.CacheConfig) (repositories.CacheRepository, error) {
+	driver, ok := drivers[cfg.Driver]
 	if !ok {
-		return nil, fmt.Errorf("unsupported cache driver: %q (supported drivers can be registered via RegisterDriver)", cfg.Driver)
+		return nil, fmt.Errorf("unsupported cache driver: %s", cfg.Driver)
 	}
+	return driver(cfg)
+}
 
-	return factory(cfg)
+var ErrCacheMiss = fmt.Errorf("key not found in cache")
+
+func init() {
+	RegisterDriver("redis", func(cfg config.CacheConfig) (repositories.CacheRepository, error) {
+		return NewRedisClient(cfg), nil
+	})
+	RegisterDriver("memory", func(cfg config.CacheConfig) (repositories.CacheRepository, error) {
+		return NewMemoryClient(), nil
+	})
 }

@@ -32,7 +32,7 @@ var (
 
 // AppError pairs a sentinel error with a user-facing message and optional field.
 //
-// This is the only error type HTTP controllers should receive from services.
+// This is the only error type HTTP controllers should receive from 
 // Keeping the original sentinel error lets the controller map it to a status code,
 // while the message is safe to show to the user.
 type AppError struct {

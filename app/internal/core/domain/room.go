@@ -43,10 +43,12 @@ type Room struct {
 	PasswordHash string // Empty for public rooms
 	Language     string
 	State        RoomState
+	MinPlayers   int
 	MaxPlayers   int
 	RoundTime    int // Seconds per drawing turn
 	MaxRounds    int
 	CurrentRound int
+	CustomWords  []string // Custom word list for private rooms; overrides default dictionaries
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

@@ -2,7 +2,7 @@
 //
 // Controllers are thin adapters. They should:
 //   - Parse and validate request input.
-//   - Call application services.
+//   - Call application 
 //   - Map service errors to HTTP responses.
 //
 // Controllers must NOT contain business logic.

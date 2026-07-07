@@ -84,3 +84,16 @@ DRAWO_LOG_LEVEL=debug`
 	assert.Equal(t, "7777", cfg.Server.Port)
 	assert.Equal(t, "debug", cfg.Log.Level)
 }
+
+func TestMustLoad(t *testing.T) {
+	resetEnv(t)
+	assert.NotPanics(t, func() {
+		MustLoad()
+	})
+}
+
+func TestGetEnv(t *testing.T) {
+	t.Setenv("SOME_TEST_KEY", "some_value")
+	assert.Equal(t, "some_value", GetEnv("SOME_TEST_KEY", "default"))
+	assert.Equal(t, "default", GetEnv("NON_EXISTENT_KEY", "default"))
+}

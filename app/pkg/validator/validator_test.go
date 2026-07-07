@@ -8,8 +8,20 @@ import (
 
 type testUser struct {
 	Username string `json:"username" validate:"required,min=3"`
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email,omitempty" validate:"required,email"`
 	Age      int    `json:"age" validate:"gte=18"`
+}
+
+type testTags struct {
+	Field1 string `json:"field1" validate:"lte=5"`
+}
+
+type testNoJson struct {
+	Username string `validate:"required"`
+}
+
+type testDash struct {
+    Field string `json:"-" validate:"required"`
 }
 
 func TestStructValid(t *testing.T) {
@@ -27,9 +39,51 @@ func TestStructInvalid(t *testing.T) {
 		Email:    "not-an-email",
 		Age:      16,
 	}
-	 errs := Struct(u)
+	errs := Struct(u)
 	assert.NotNil(t, errs)
 	assert.Contains(t, errs, "username")
 	assert.Contains(t, errs, "email")
 	assert.Contains(t, errs, "age")
+}
+
+func TestStructPtr(t *testing.T) {
+	u := &testUser{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Age:      25,
+	}
+	assert.Nil(t, Struct(u))
+}
+
+func TestNonStruct(t *testing.T) {
+    errs := Struct(123)
+    assert.NotNil(t, errs)
+    assert.Contains(t, errs, "_error")
+}
+
+func TestJsonTagEdgeCases(t *testing.T) {
+    // Test - tag
+    u1 := testDash{}
+    errs1 := Struct(u1)
+    assert.Contains(t, errs1, "Field")
+
+    // Test empty tag
+    type testEmpty struct {
+        Field string `json:"" validate:"required"`
+    }
+    errs2 := Struct(testEmpty{})
+    assert.Contains(t, errs2, "Field")
+
+    // Test options like ,omitempty
+    u3 := testUser{}
+    errs3 := Struct(u3)
+    assert.Contains(t, errs3, "email")
+}
+
+func TestMessageForTag(t *testing.T) {
+    type testUnknown struct {
+        Field string `validate:"url"`
+    }
+    errs := Struct(testUnknown{Field: "not-url"})
+    assert.Equal(t, "Invalid value.", errs["Field"][0])
 }

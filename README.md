@@ -14,12 +14,17 @@ A production-quality multiplayer drawing and guessing game.
    make dev-up
    ```
 
-3. Run the Go server:
+3. Run database migrations (Required on first start):
+   ```bash
+   go run . migrate
+   ```
+
+4. Run the Go server:
    ```bash
    cd app && go run . serve
    ```
 
-4. Visit `http://localhost:8080/health/ping`.
+5. Visit `http://localhost:8080/health/ping`.
 
 ## Configuration
 
@@ -53,3 +58,5 @@ See `docs/01-analysis-and-roadmap.md` for the full development roadmap.
 | `make build` | Build the Go binary |
 | `make test` | Run unit tests |
 | `make test-race` | Run tests with race detector |
+| `make test-coverage` | Generate HTML test coverage report |
+

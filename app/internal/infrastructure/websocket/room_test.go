@@ -11,8 +11,8 @@ import (
 
 	"drawo/config"
 	"drawo/internal/core/domain"
+	"drawo/internal/core/ports/repositories"
 	"drawo/internal/infrastructure/cache"
-	"drawo/internal/repositories"
 )
 
 func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
@@ -22,14 +22,17 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 
 	roomRepo := repositories.NewRoomRepo(cacheClient)
 	hub := NewHub(roomRepo)
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	state := &domain.Room{
 		ID:         "room-ephemeral-1",
 		Name:       "Goroutine Test Room",
 		InviteCode: "CODE123",
 		Type:       domain.RoomTypePrivate,
-		State:      domain.RoomStatePlaying, // Playing state triggers auto-close when all players leave
+		State:      domain.RoomStatePlaying,
+		MinPlayers: 2,
+		MaxPlayers: 8,
 	}
 
 	room, err := hub.CreateRoom(ctx, state)
@@ -61,7 +64,7 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 	// Allow goroutine to process joins
 	time.Sleep(50 * time.Millisecond)
 
-	// Drain join notifications from client 2 buffer
+	// Drain notifications
 	for len(client2.Send) > 0 {
 		<-client2.Send
 	}
@@ -77,7 +80,7 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Verify Client 2 received the draw broadcast envelope
+	// Verify Client 2 received the draw
 	require.NotEmpty(t, client2.Send)
 	msg := <-client2.Send
 	var env MessageEnvelope
@@ -88,7 +91,7 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 	hub.LeaveRoom("room-ephemeral-1", client1)
 	time.Sleep(50 * time.Millisecond)
 
-	// Client 2 leaves (all players gone during Playing state -> goroutine auto-destroys and invalidates invite code)
+	// Client 2 leaves
 	hub.LeaveRoom("room-ephemeral-1", client2)
 	time.Sleep(100 * time.Millisecond)
 
@@ -96,7 +99,35 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 	_, _, err = hub.GetRoom(ctx, "room-ephemeral-1")
 	assert.Error(t, err)
 
-	// Verify invite code is automatically invalidated in discovery cache
+	// Verify invite code is invalidated
 	inviteLookup, _ := hub.GetRoomByInviteCode(ctx, "CODE123")
 	assert.Nil(t, inviteLookup)
+}
+
+func TestHub_EdgeCases(t *testing.T) {
+	cacheClient, _ := cache.NewClient(config.CacheConfig{Driver: "memory"})
+	roomRepo := repositories.NewRoomRepo(cacheClient)
+	hub := NewHub(roomRepo)
+	ctx := context.Background()
+
+	// Create room without ID should fail
+	_, err := hub.CreateRoom(ctx, &domain.Room{})
+	assert.Error(t, err)
+
+	// Get non-existent room (checks cache too)
+	_, _, err = hub.GetRoom(ctx, "ghost")
+	assert.Error(t, err)
+
+    // Test room in cache but NOT in local map (multi-instance simulation)
+    roomInCache := &domain.Room{ID: "remote", Name: "remote"}
+    roomRepo.Save(ctx, roomInCache)
+    
+    h, s, err := hub.GetRoom(ctx, "remote")
+    assert.NoError(t, err)
+    assert.Nil(t, h)
+    assert.Equal(t, "remote", s.ID)
+
+	// Join non-existent room
+	err = hub.JoinRoom(ctx, "ghost", &Client{})
+	assert.Error(t, err)
 }

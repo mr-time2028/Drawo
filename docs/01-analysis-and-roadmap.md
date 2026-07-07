@@ -164,6 +164,7 @@ We will build the project in **18 phases**. Each phase is a complete, testable m
 ### Phase 11 — Game Loop
 - Lobby → countdown → category selection → word point selection → word selection → drawing → guessing → round end → leaderboard → next round → game end.
 - Word suggestion engine (N random words from chosen category & point tier).
+- **Custom Word List Support:** If a private room has a host-provided custom word list, use it exclusively for suggestions; otherwise, fallback to language-based dictionaries.
 - Timer service per room.
 - Hint reveal logic (dashed placeholders, occasional letter reveal).
 - Drawer rotation algorithm.

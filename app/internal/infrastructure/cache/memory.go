@@ -3,126 +3,74 @@ package cache
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
-	"drawo/config"
-	"drawo/internal/core/ports"
-	"drawo/pkg/logger"
+	"drawo/internal/core/ports/repositories"
 )
 
-type memoryItem struct {
-	value     interface{}
-	expiresAt time.Time
+type item struct {
+	value      interface{}
+	expiration int64
 }
 
-func (m *memoryItem) isExpired() bool {
-	if m.expiresAt.IsZero() {
-		return false
-	}
-	return time.Now().After(m.expiresAt)
-}
-
-// MemoryClient implements ports.CacheRepository using an in-memory sync.Map.
-// Useful for local development, testing, or deployments without external caching engines.
 type MemoryClient struct {
-	items  sync.Map
-	closed chan struct{}
+	mu    sync.RWMutex
+	items map[string]item
 }
 
-// NewMemoryClient creates an in-memory ports.CacheRepository.
-func NewMemoryClient(cfg config.CacheConfig) (ports.CacheRepository, error) {
-	logger.L.Info("initialized non-relational store", slog.String("driver", "memory"))
-	m := &MemoryClient{
-		closed: make(chan struct{}),
-	}
-	go m.cleanupLoop()
-	return m, nil
-}
-
-func (m *MemoryClient) cleanupLoop() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-m.closed:
-			return
-		case <-ticker.C:
-			now := time.Now()
-			m.items.Range(func(key, val interface{}) bool {
-				item, ok := val.(*memoryItem)
-				if ok && !item.expiresAt.IsZero() && now.After(item.expiresAt) {
-					m.items.Delete(key)
-				}
-				return true
-			})
-		}
+func NewMemoryClient() *MemoryClient {
+	return &MemoryClient{
+		items: make(map[string]item),
 	}
 }
 
-// Set stores a key-value pair with an optional TTL.
 func (m *MemoryClient) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	var exp time.Time
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var exp int64
 	if ttl > 0 {
-		exp = time.Now().Add(ttl)
+		exp = time.Now().Add(ttl).UnixNano()
 	}
-	m.items.Store(key, &memoryItem{value: value, expiresAt: exp})
+	m.items[key] = item{
+		value:      value,
+		expiration: exp,
+	}
 	return nil
 }
 
-// Get retrieves the string representation of a stored value.
 func (m *MemoryClient) Get(ctx context.Context, key string) (string, error) {
-	val, ok := m.items.Load(key)
-	if !ok {
-		return "", fmt.Errorf("key not found: %s", key)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	it, ok := m.items[key]
+	if !ok || (it.expiration > 0 && time.Now().UnixNano() > it.expiration) {
+		return "", ErrCacheMiss
 	}
-	item, ok := val.(*memoryItem)
-	if !ok || item.isExpired() {
-		m.items.Delete(key)
-		return "", fmt.Errorf("key not found: %s", key)
-	}
-	return fmt.Sprintf("%v", item.value), nil
+	return fmt.Sprintf("%v", it.value), nil
 }
 
-// Delete deletes one or more keys.
 func (m *MemoryClient) Delete(ctx context.Context, keys ...string) error {
-	for _, key := range keys {
-		m.items.Delete(key)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, k := range keys {
+		delete(m.items, k)
 	}
 	return nil
 }
 
-// Exists checks if one or more keys exist.
 func (m *MemoryClient) Exists(ctx context.Context, keys ...string) (bool, error) {
-	count := 0
-	for _, key := range keys {
-		if val, ok := m.items.Load(key); ok {
-			item, ok := val.(*memoryItem)
-			if ok && !item.isExpired() {
-				count++
-			} else {
-				m.items.Delete(key)
-			}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, k := range keys {
+		it, ok := m.items[k]
+		if ok && (it.expiration == 0 || time.Now().UnixNano() <= it.expiration) {
+			return true, nil
 		}
 	}
-	return count > 0, nil
+	return false, nil
 }
 
-// Health always reports healthy for memory client.
-func (m *MemoryClient) Health(ctx context.Context) error {
-	return nil
-}
+func (m *MemoryClient) Close() error { return nil }
+func (m *MemoryClient) Health(ctx context.Context) error { return nil }
 
-// Close stops the cleanup loop.
-func (m *MemoryClient) Close() error {
-	select {
-	case <-m.closed:
-	default:
-		close(m.closed)
-	}
-	return nil
-}
-
-// Compile-time check: MemoryClient implements ports.CacheRepository.
-var _ ports.CacheRepository = (*MemoryClient)(nil)
+var _ repositories.CacheRepository = (*MemoryClient)(nil)

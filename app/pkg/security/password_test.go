@@ -25,5 +25,10 @@ func TestHashAndVerifyPassword(t *testing.T) {
 func TestGenerateRandomToken(t *testing.T) {
 	token, err := GenerateRandomToken(32)
 	require.NoError(t, err)
-	assert.Len(t, token, 64) // hex encoding doubles the length
+	assert.Len(t, token, 64)
+
+	// Token of size 0
+	token, err = GenerateRandomToken(0)
+	require.NoError(t, err)
+	assert.Len(t, token, 0)
 }

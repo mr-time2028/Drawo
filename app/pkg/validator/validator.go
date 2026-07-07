@@ -5,7 +5,7 @@
 //   - Translate validation errors into a simple map[field]messages.
 //
 // Why wrap it?
-//   We do not want Gin's binding and validation details to leak into services.
+//   We do not want Gin's binding and validation details to leak into 
 //   A wrapper lets us swap the underlying library later without touching business logic.
 package validator
 

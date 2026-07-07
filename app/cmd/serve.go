@@ -25,10 +25,6 @@ var serveCmd = &cobra.Command{
 }
 
 func serve() error {
-	// Load configuration from env vars and optional config file.
-	if err := config.Load(); err != nil {
-		return err
-	}
 	cfg := config.Get()
 
 	// Initialize the dependency container. This also opens DB and cache store.

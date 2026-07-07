@@ -2,12 +2,12 @@
 //
 // Responsibility:
 //   - Open and configure a database connection using GORM dialectors based on config.
-//   - Implement ports.HealthReporter so the server can report DB health.
+//   - Implement repositories.HealthReporter so the server can report DB health.
 //   - Provide a factory registry so switching between relational databases (PostgreSQL, MySQL, SQLite, etc.)
-//     requires minimal code changes and no database-specific logic leaking into repositories or application services.
+//     requires minimal code changes and no database-specific logic leaking into repositories or application 
 //
 // Why this architecture?
-//   The application layer depends on interfaces (ports.UserRepository, etc.).
+//   The application layer depends on interfaces (UserRepository, etc.).
 //   Concrete repositories depend on GORM's *gorm.DB abstraction rather than raw driver connections.
 //   By decoupling driver initialization through DialectorFactory, switching databases is purely a configuration step.
 package database
@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"drawo/config"
-	"drawo/internal/core/ports"
+	 "drawo/internal/core/ports/repositories"
 	"drawo/pkg/logger"
 
 	"gorm.io/driver/postgres"
@@ -99,6 +99,9 @@ func NewConnection(cfg config.DatabaseConfig) (*Connection, error) {
 
 // Health verifies the database is reachable.
 func (c *Connection) Health(ctx context.Context) error {
+	if c.DB == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
 	sqlDB, err := c.DB.DB()
 	if err != nil {
 		return err
@@ -106,5 +109,5 @@ func (c *Connection) Health(ctx context.Context) error {
 	return sqlDB.PingContext(ctx)
 }
 
-// Compile-time check: Connection implements ports.HealthReporter.
-var _ ports.HealthReporter = (*Connection)(nil)
+// Compile-time check: Connection implements repositories.HealthReporter.
+var _ repositories.HealthReporter = (*Connection)(nil)

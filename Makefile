@@ -2,7 +2,7 @@
 #
 # One-command targets for development and production.
 
-.PHONY: dev-up dev-down dev-logs prod-up prod-down prod-logs build test test-race lint fmt
+.PHONY: dev-up dev-down dev-logs prod-up prod-down prod-logs build test test-race test-coverage lint fmt
 
 # Development commands (backing services only)
 dev-up:
@@ -33,6 +33,9 @@ test:
 
 test-race:
 	cd app && go test -race ./...
+
+test-coverage:
+	cd app && go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html && rm coverage.out
 
 fmt:
 	cd app && gofmt -w .

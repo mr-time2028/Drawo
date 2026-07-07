@@ -5,12 +5,13 @@
 ## What was delivered
 
 1. **Clean Architecture layout**
-   - `internal/core` — domain entities and repository/service interfaces.
-   - `internal/services` — placeholder application services.
-   - `internal/repositories` — GORM repository implementations.
-   - `internal/delivery/http` — Gin controllers, middlewares, routes.
-   - `internal/infrastructure` — DB, Redis, DI container.
-   - `pkg` — cross-cutting utilities (errors, logger, security, validator).
+   - `internal/core/domain/` — Granular domain entities (User, Friend, GameHistory, etc.) split into modular files.
+   - `internal/core/ports/` — Granular repository and service interfaces split by domain.
+   - `internal/services/` — Placeholder application services.
+   - `internal/repositories/` — Modular GORM repository implementations for each domain port.
+   - `internal/delivery/http/` — Gin controllers, middlewares, routes.
+   - `internal/infrastructure/` — DB, Redis, DI container.
+   - `pkg/` — cross-cutting utilities (errors, logger, security, validator).
 
 2. **Dependency injection**
    - `internal/infrastructure/di/container.go` wires DB, Redis, repositories, and services.
