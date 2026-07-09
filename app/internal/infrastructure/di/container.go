@@ -49,8 +49,8 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	}
 
 	// 1. Initialize Repositories (Persist data)
-	_ = repositories.NewUserRepo(dbConn.DB)
-	_ = repositories.NewProfileRepo(dbConn.DB)
+	userRepo := repositories.NewUserRepo(dbConn.DB)
+	profileRepo := repositories.NewProfileRepo(dbConn.DB)
 	_ = repositories.NewFriendshipRepo(dbConn.DB)
 	_ = repositories.NewFriendRequestRepo(dbConn.DB)
 	_ = repositories.NewGameHistoryRepo(dbConn.DB)
@@ -66,6 +66,10 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	// 3. Initialize Services (Business Logic)
 	rateLimiter := services.NewRateLimiter(cacheClient)
 	
+	authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
+	userSvc := services.NewUserService() 
+	roomSvc := services.NewRoomService(roomRepo)
+	
 	// WebSocket Hub manages active room goroutines locally and coordinates discovery via Redis.
 	hub := websocket.NewHub(roomRepo)
 
@@ -77,9 +81,9 @@ func NewContainer(cfg config.Config) (*Container, error) {
 		Limiter:  rateLimiter,
 		Hub:      hub,
 		Services: Services{
-			Auth: services.NewAuthService(),
-			User: services.NewUserService(),
-			Room: services.NewRoomService(roomRepo),
+			Auth: authSvc,
+			User: userSvc,
+			Room: roomSvc,
 		},
 	}, nil
 }

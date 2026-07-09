@@ -29,8 +29,13 @@ func Register(router *gin.Engine, container *di.Container) {
 	// API v1 group.
 	api := router.Group("/api/v1")
 	{
-		// Auth routes will be added in Phase 5.
-		// User routes will be added in Phase 6.
-		_ = api
+		// Auth routes (Phase 4)
+		authCtrl := controllers.NewAuthController(container.Services.Auth)
+		auth := api.Group("/auth")
+		{
+			auth.POST("/register", authCtrl.Register)
+			auth.POST("/login", authCtrl.Login)
+			auth.POST("/refresh", authCtrl.Refresh)
+		}
 	}
 }
