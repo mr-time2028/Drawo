@@ -19,6 +19,7 @@ type Container struct {
 	DB       *database.Connection
 	Cache    repositories.CacheRepository
 	Sessions repositories.SessionRepository
+	OTPs     repositories.OTPRepository
 	Limiter  services.RateLimiter
 	Hub      *websocket.Hub
 	Services Services
@@ -62,12 +63,14 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	// 2. Initialize Specialized Cache Repositories
 	sessionRepo := repositories.NewSessionRepo(cacheClient)
 	roomRepo := repositories.NewRoomRepo(cacheClient)
+	otpRepo := repositories.NewOTPRepo(cacheClient)
 
 	// 3. Initialize Services (Business Logic)
 	rateLimiter := services.NewRateLimiter(cacheClient)
+	otpSvc := services.NewMockOTPService()
 	
 	authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
-	userSvc := services.NewUserService() 
+	userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc) 
 	roomSvc := services.NewRoomService(roomRepo)
 	
 	// WebSocket Hub manages active room goroutines locally and coordinates discovery via Redis.
@@ -78,6 +81,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 		DB:       dbConn,
 		Cache:    cacheClient,
 		Sessions: sessionRepo,
+		OTPs:     otpRepo,
 		Limiter:  rateLimiter,
 		Hub:      hub,
 		Services: Services{

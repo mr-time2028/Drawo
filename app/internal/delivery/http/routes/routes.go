@@ -36,6 +36,26 @@ func Register(router *gin.Engine, container *di.Container) {
 			auth.POST("/register", authCtrl.Register)
 			auth.POST("/login", authCtrl.Login)
 			auth.POST("/refresh", authCtrl.Refresh)
+			auth.POST("/logout", authCtrl.Logout)
+		}
+
+		// User & Profile routes (Phase 5)
+		userCtrl := controllers.NewUserController(container.Services.User)
+		user := api.Group("/user")
+		user.Use(middlewares.RequireAuth(container))
+		{
+			user.GET("/profile", userCtrl.GetProfile)
+			user.PATCH("/profile", userCtrl.UpdateProfile)
+			user.POST("/profile/username", userCtrl.ChangeUsername)
+			user.POST("/profile/verify/request", userCtrl.RequestVerification)
+			user.POST("/profile/verify/confirm", userCtrl.ConfirmVerification)
+		}
+
+		// Admin routes example (Phase 5/8)
+		admin := api.Group("/admin")
+		admin.Use(middlewares.RequireAuth(container), middlewares.RequireAdmin())
+		{
+			// admin.GET("/users", adminCtrl.ListUsers)
 		}
 	}
 }

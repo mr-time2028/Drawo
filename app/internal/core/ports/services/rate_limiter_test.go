@@ -13,7 +13,6 @@ import (
 )
 
 func TestRateLimiter_Allow(t *testing.T) {
-	// Use memory client for isolation
 	mc, err := cache.NewClient(config.CacheConfig{Driver: "memory"})
 	require.NoError(t, err)
 	defer mc.Close()
@@ -24,23 +23,34 @@ func TestRateLimiter_Allow(t *testing.T) {
 	limit := 3
 	window := 100 * time.Millisecond
 
-	// 1. First 3 requests should be allowed
+	// 1. First 3 requests allowed
 	for i := 0; i < limit; i++ {
 		allowed, err := limiter.Allow(ctx, key, limit, window)
 		assert.NoError(t, err)
-		assert.True(t, allowed, "Request %d should be allowed", i+1)
+		assert.True(t, allowed)
 	}
 
-	// 2. 4th request should be blocked
+	// 2. 4th blocked
 	allowed, err := limiter.Allow(ctx, key, limit, window)
 	assert.NoError(t, err)
-	assert.False(t, allowed, "4th request should be blocked")
+	assert.False(t, allowed)
 
-	// 3. Wait for window to pass
+	// 3. Wait for window
 	time.Sleep(window + 10*time.Millisecond)
 
-	// 4. Should be allowed again after window (Memory fallback uses simple TTL)
 	allowed, err = limiter.Allow(ctx, key, limit, window)
 	assert.NoError(t, err)
-	assert.True(t, allowed, "Request after window should be allowed")
+	assert.True(t, allowed)
+}
+
+type failCache struct {
+    cache.MemoryClient // inherit most methods
+}
+func (f *failCache) Get(ctx context.Context, key string) (string, error) { return "", assert.AnError }
+func (f *failCache) Set(ctx context.Context, key string, val interface{}, ttl time.Duration) error { return assert.AnError }
+
+func TestRateLimiter_Failures(t *testing.T) {
+    limiter := NewRateLimiter(&failCache{})
+    _, err := limiter.Allow(context.Background(), "k", 1, time.Hour)
+    assert.Error(t, err)
 }

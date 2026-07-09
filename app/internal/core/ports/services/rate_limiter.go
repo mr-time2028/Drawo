@@ -30,19 +30,11 @@ func NewRateLimiter(cache repositories.CacheRepository) RateLimiter {
 //
 // HOW IT WORKS:
 //   1. We create a unique key for the user/action.
-//   2. We store a timestamped list of previous actions.
-//   3. On every request, we remove actions older than (Now - Window).
-//   4. If the remaining count < Limit, we allow and record the new action.
+//   2. We store a counter.
+//   3. If the count < Limit, we allow and record the new action.
 func (r *slidingWindowRateLimiter) Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, error) {
 	fullKey := fmt.Sprintf("rl:%s", key)
-	// now := time.Now().UnixNano()
-	// windowStart := now - window.Nanoseconds()
 
-	// In this phase, we use the simple CacheRepository which is string-based.
-	// In a real Redis implementation (Phase 4), we will use Sorted Sets (ZADD/ZREM) 
-	// for 100% precision. 
-	// For now, we implement a functional fallback using our existing cache port.
-	
 	// Check if we have a counter
 	val, err := r.cache.Get(ctx, fullKey)
 	count := 0

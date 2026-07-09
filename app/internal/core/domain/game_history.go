@@ -13,23 +13,3 @@ type GameHistory struct {
 	StartedAt time.Time
 	EndedAt   time.Time
 }
-
-// Round records historical details about a single drawing round in a completed game.
-type Round struct {
-	ID            string
-	GameHistoryID string
-	RoundNumber   int
-	DrawerID      string
-	Word          string
-	StartedAt     time.Time
-	EndedAt       time.Time
-}
-
-// Score records the points earned by a player during a completed game.
-type Score struct {
-	ID            string
-	GameHistoryID string
-	UserID        string
-	Points        int64
-	Rank          int
-}

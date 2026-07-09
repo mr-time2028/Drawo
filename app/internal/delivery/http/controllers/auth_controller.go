@@ -117,3 +117,30 @@ func (ctrl *AuthController) Refresh(c *gin.Context) {
 
 	c.JSON(http.StatusOK, tokens)
 }
+
+// Logout terminates the current session and invalidates tokens.
+// This endpoint requires the 'Authorization' header to be present.
+func (ctrl *AuthController) Logout(c *gin.Context) {
+	// 1. Extract the token from the header.
+	// Note: Usually this is done by an Auth middleware, but we can do it here
+	// to ensure the service gets the raw string it needs.
+	authHeader := c.GetHeader("Authorization")
+	tokenStr := ""
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenStr = authHeader[7:]
+	}
+
+	if tokenStr == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "already logged out"})
+		return
+	}
+
+	// 2. Call service to delete the session from Redis.
+	// If the token is invalid or already expired, the service handles it gracefully.
+	_ = ctrl.authSvc.Logout(c.Request.Context(), tokenStr)
+
+	// 3. Return success. We always return 200 OK even if the session was already gone
+	// to prevent leaking information about session validity.
+	c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
+}
+

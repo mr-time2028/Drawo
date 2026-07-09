@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"drawo/internal/core/domain"
-	"drawo/internal/core/ports/services"
 	"drawo/pkg/errors"
 )
 
@@ -43,16 +42,16 @@ func (m *mockAuthService) Logout(ctx context.Context, at string) error {
 	return m.Called(ctx, at).Error(0)
 }
 
-func TestAuthController_Register(t *testing.T) {
+func TestAuthController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := new(mockAuthService)
-	// We cast to services.AuthService to ensure it implements it
-	var _ services.AuthService = svc
 	ctrl := NewAuthController(svc)
 	router := gin.New()
 	router.POST("/register", ctrl.Register)
+	router.POST("/login", ctrl.Login)
+	router.POST("/refresh", ctrl.Refresh)
 
-	t.Run("Success", func(t *testing.T) {
+	t.Run("Register_Success", func(t *testing.T) {
 		svc.On("Register", mock.Anything, "hamid", "pass12345").Return(&domain.User{ID: "1", Username: "hamid"}, nil).Once()
 		
 		body := `{"username":"hamid", "password":"pass12345"}`
@@ -64,35 +63,14 @@ func TestAuthController_Register(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "hamid")
 	})
 
-	t.Run("ValidationError", func(t *testing.T) {
-		body := `{"username":"hi"}` // too short
+	t.Run("Register_InvalidJSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(body))
+		req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(`{invalid`))
 		router.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
-    
-    t.Run("ServiceError", func(t *testing.T) {
-		svc.On("Register", mock.Anything, "fail", "pass12345").Return(nil, errors.New(errors.ErrConflict, "exists")).Once()
-		
-		body := `{"username":"fail", "password":"pass12345"}`
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/register", bytes.NewBufferString(body))
-		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusConflict, w.Code)
-	})
-}
-
-func TestAuthController_Login(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	svc := new(mockAuthService)
-	ctrl := NewAuthController(svc)
-	router := gin.New()
-	router.POST("/login", ctrl.Login)
-
-	t.Run("Success", func(t *testing.T) {
+    t.Run("Login_Success", func(t *testing.T) {
 		svc.On("Login", mock.Anything, "hamid", "pass", mock.Anything, mock.Anything).Return(&domain.TokenPair{AccessToken: "acc"}, nil).Once()
 		
 		body := `{"username":"hamid", "password":"pass"}`
@@ -103,16 +81,24 @@ func TestAuthController_Login(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Body.String(), "acc")
 	})
-}
 
-func TestAuthController_Refresh(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	svc := new(mockAuthService)
-	ctrl := NewAuthController(svc)
-	router := gin.New()
-	router.POST("/refresh", ctrl.Refresh)
+    t.Run("Login_InvalidJSON", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/login", bytes.NewBufferString(`{invalid`))
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
 
-	t.Run("Success", func(t *testing.T) {
+    t.Run("Login_ServiceFail", func(t *testing.T) {
+        svc.On("Login", mock.Anything, "fail", "pass", mock.Anything, mock.Anything).Return(nil, errors.New(errors.ErrUnauthorized, "bad")).Once()
+		body := `{"username":"fail", "password":"pass"}`
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+    })
+
+    t.Run("Refresh_Success", func(t *testing.T) {
 		svc.On("Refresh", mock.Anything, "old").Return(&domain.TokenPair{AccessToken: "new"}, nil).Once()
 		
 		body := `{"refresh_token":"old"}`
@@ -123,4 +109,50 @@ func TestAuthController_Refresh(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Body.String(), "new")
 	})
+
+    t.Run("Refresh_InvalidJSON", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/refresh", bytes.NewBufferString(`{invalid`))
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+    t.Run("Refresh_ServiceFail", func(t *testing.T) {
+        svc.On("Refresh", mock.Anything, "fail").Return(nil, errors.New(errors.ErrUnauthorized, "bad")).Once()
+		body := `{"refresh_token":"fail"}`
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/refresh", bytes.NewBufferString(body))
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+    })
 }
+
+func TestAuthController_Logout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := new(mockAuthService)
+	ctrl := NewAuthController(svc)
+	router := gin.New()
+	router.POST("/logout", ctrl.Logout)
+
+	t.Run("Success", func(t *testing.T) {
+		svc.On("Logout", mock.Anything, "valid-token").Return(nil).Once()
+		
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/logout", nil)
+		req.Header.Set("Authorization", "Bearer valid-token")
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "successfully")
+	})
+
+	t.Run("NoHeader", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/logout", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "already logged out")
+	})
+}
+

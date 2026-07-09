@@ -39,6 +39,11 @@ func setupAuthDeps(t *testing.T) (config.Config, repositories.UserRepository, re
 	return cfg, userRepo, profileRepo, sessionRepo, limiter
 }
 
+type failLimiter struct{}
+func (f *failLimiter) Allow(ctx context.Context, k string, l int, w time.Duration) (bool, error) {
+    return false, assert.AnError
+}
+
 func TestAuthService_FullLifecycle(t *testing.T) {
 	cfg, userRepo, profileRepo, sessionRepo, limiter := setupAuthDeps(t)
 	svc := NewAuthService(cfg, userRepo, profileRepo, sessionRepo, limiter)
@@ -74,9 +79,13 @@ func TestAuthService_FullLifecycle(t *testing.T) {
 	// 6. LOGOUT
 	err = svc.Logout(ctx, tokens3.AccessToken)
 	assert.NoError(t, err)
+
+    // Logout already invalid
+    err = svc.Logout(ctx, "invalid")
+    assert.NoError(t, err)
 }
 
-func TestAuthService_Errors(t *testing.T) {
+func TestAuthService_Failures(t *testing.T) {
 	cfg, userRepo, profileRepo, sessionRepo, limiter := setupAuthDeps(t)
 	svc := NewAuthService(cfg, userRepo, profileRepo, sessionRepo, limiter)
 	ctx := context.Background()
@@ -86,17 +95,31 @@ func TestAuthService_Errors(t *testing.T) {
 	_, err := svc.Register(ctx, "dup", "pass")
 	assert.Error(t, err)
 
-	// Login Fail
+	// Login Fail (Ghost User)
 	_, err = svc.Login(ctx, "ghost", "pass", "", "")
 	assert.Error(t, err)
+
+    // Login Fail (Wrong Password)
+    svc.Register(ctx, "wrong", "pass")
+    _, err = svc.Login(ctx, "wrong", "fail", "", "")
+    assert.Error(t, err)
 
 	// Refresh Fail (Invalid Token)
 	_, err = svc.Refresh(ctx, "invalid")
 	assert.Error(t, err)
+    
+    // Refresh Fail (Revoked Session)
+    user, _ := svc.Register(ctx, "hamid2", "pass")
+    tks, err := svc.Login(ctx, "hamid2", "pass", "", "")
+    require.NoError(t, err)
+    sessionRepo.DeleteAllForUser(ctx, user.ID)
+    _, err = svc.Refresh(ctx, tks.RefreshToken)
+    assert.Error(t, err)
 
-	// Logout Invalid
-	err = svc.Logout(ctx, "invalid")
-	assert.NoError(t, err)
+    // Failed Limiter
+    fs := NewAuthService(cfg, userRepo, profileRepo, sessionRepo, &failLimiter{})
+    _, err = fs.Login(ctx, "u", "p", "", "")
+    assert.Error(t, err)
 }
 
 func TestAuthService_RateLimit(t *testing.T) {
@@ -109,4 +132,14 @@ func TestAuthService_RateLimit(t *testing.T) {
     _, err := svc.Login(ctx, "rate", "pass", "", "")
     assert.Error(t, err)
     assert.Contains(t, err.Error(), "too many failed attempts")
+}
+
+func TestAuthService_Register_BrokenDB(t *testing.T) {
+    db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+    ur := repositories.NewUserRepo(db)
+    pr := repositories.NewProfileRepo(db)
+    svc := NewAuthService(config.Get(), ur, pr, nil, nil)
+    
+    _, err := svc.Register(context.Background(), "u", "p")
+    assert.Error(t, err)
 }
