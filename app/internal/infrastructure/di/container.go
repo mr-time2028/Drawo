@@ -27,9 +27,10 @@ type Container struct {
 
 // Services groups all high-level application services.
 type Services struct {
-	Auth services.AuthService
-	User services.UserService
-	Room services.RoomService
+	Auth    services.AuthService
+	User    services.UserService
+	Room    services.RoomService
+	Content services.ContentService
 }
 
 // NewContainer builds the full dependency graph for the application.
@@ -59,6 +60,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	_ = repositories.NewAchievementRepo(dbConn.DB)
 	_ = repositories.NewPlayerStatisticRepo(dbConn.DB)
 	_ = repositories.NewUserSettingsRepo(dbConn.DB)
+	contentRepo := repositories.NewContentRepo(dbConn.DB)
 
 	// 2. Initialize Specialized Cache Repositories
 	sessionRepo := repositories.NewSessionRepo(cacheClient)
@@ -68,6 +70,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	// 3. Initialize Services (Business Logic)
 	rateLimiter := services.NewRateLimiter(cacheClient)
 	otpSvc := services.NewMockOTPService()
+	contentSvc := services.NewContentService(contentRepo, profileRepo, 100)
 	
 	authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
 	userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc) 
@@ -85,9 +88,10 @@ func NewContainer(cfg config.Config) (*Container, error) {
 		Limiter:  rateLimiter,
 		Hub:      hub,
 		Services: Services{
-			Auth: authSvc,
-			User: userSvc,
-			Room: roomSvc,
+			Auth:    authSvc,
+			User:    userSvc,
+			Room:    roomSvc,
+			Content: contentSvc,
 		},
 	}, nil
 }

@@ -1,0 +1,18 @@
+{
+    "meta": {
+        "direction": "rtl",
+        "font": "B Nazanin"
+    },
+    "errors": {
+        "unauthorized": "شما اجازه دسترسی ندارید",
+        "not_found": "مورد یافت نشد",
+        "internal_server": "خطای داخلی سرور",
+        "bad_request": "درخواست نامعتبر است",
+        "conflict": "این نام قبلا انتخاب شده است"
+    },
+    "game": {
+        "welcome": "خوش آمدید به دراوو",
+        "waiting_for_players": "در انتظار بازیکنان...",
+        "start_game": "شروع بازی"
+    }
+}

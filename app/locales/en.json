@@ -1,0 +1,18 @@
+{
+    "meta": {
+        "direction": "ltr",
+        "font": "Arial"
+    },
+    "errors": {
+        "unauthorized": "Unauthorized access",
+        "not_found": "Item not found",
+        "internal_server": "Internal server error",
+        "bad_request": "Bad request",
+        "conflict": "Item already exists"
+    },
+    "game": {
+        "welcome": "Welcome to Drawo",
+        "waiting_for_players": "Waiting for players...",
+        "start_game": "Start Game"
+    }
+}
