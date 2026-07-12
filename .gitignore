@@ -3,6 +3,9 @@
 
 # Go build artifacts
 app/bin/
+
+# Local file storage uploads
+app/uploads/
 *.exe
 *.exe~
 *.dll

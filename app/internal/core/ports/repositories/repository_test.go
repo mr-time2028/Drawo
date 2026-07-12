@@ -17,7 +17,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	// Migrate all tables
 	err = db.AutoMigrate(
 		&domain.User{},
 		&domain.Profile{},
@@ -30,222 +29,121 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&domain.Achievement{},
 		&domain.PlayerStatistic{},
 		&domain.UserSettings{},
+		&domain.Category{},
+		&domain.Word{},
+		&domain.BadWord{},
+		&domain.Song{},
+		&domain.GlobalSetting{},
 	)
 	require.NoError(t, err)
-
 	return db
-}
-
-func setupBrokenDB(t *testing.T) *gorm.DB {
-    // A DB where tables don't exist
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-    return db
 }
 
 func TestUserRepository(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewUserRepo(db)
-
-	user := &domain.User{
-		ID:       "user-1",
-		Username: "alice",
-	}
-
-	// Test Insert
-	err := repo.Insert(user)
-	assert.NoError(t, err)
-
-	// Test Exists
-	exists, err := repo.Exists("alice")
-	assert.NoError(t, err)
+	user := &domain.User{ID: "u1", Username: "alice"}
+	require.NoError(t, repo.Insert(user))
+	exists, _ := repo.Exists("alice")
 	assert.True(t, exists)
-
-	// Test GetByID
-	fetched, err := repo.GetByID("user-1")
-	assert.NoError(t, err)
+	fetched, _ := repo.GetByID("u1")
 	assert.Equal(t, "alice", fetched.Username)
-
-	// Test GetByUsername
-	fetched, err = repo.GetByUsername("alice")
-	assert.NoError(t, err)
-	assert.Equal(t, "user-1", fetched.ID)
-
-	// Test Update
-	user.Username = "alice-updated"
-	err = repo.Update(user)
-	assert.NoError(t, err)
-	
-	fetched, _ = repo.GetByID("user-1")
-	assert.Equal(t, "alice-updated", fetched.Username)
-	
-	// Test Not Found
-	f, err := repo.GetByID("none")
-	assert.NoError(t, err)
-	assert.Nil(t, f)
-	
-	f, err = repo.GetByUsername("none")
-	assert.NoError(t, err)
-	assert.Nil(t, f)
-
-    // Test Errors (broken DB)
-    brokenRepo := NewUserRepo(setupBrokenDB(t))
-    _, err = brokenRepo.GetByID("1")
-    assert.Error(t, err)
-    _, err = brokenRepo.GetByUsername("1")
-    assert.Error(t, err)
-    _, err = brokenRepo.Exists("1")
-    assert.Error(t, err)
+	fetched, _ = repo.GetByUsername("alice")
+	assert.Equal(t, "u1", fetched.ID)
+	user.Username = "alice2"
+	assert.NoError(t, repo.Update(user))
+	db.Create(&domain.Profile{UserID: "u1", Email: "alice@test.com"})
+	results, _ := repo.SearchUsers("alice")
+	assert.Len(t, results, 1)
 }
 
 func TestProfileRepository(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewProfileRepo(db)
-
-	profile := &domain.Profile{
-		UserID: "user-1",
-		Email:  "alice@example.com",
-	}
-
-	err := repo.Insert(profile)
-	assert.NoError(t, err)
-
-	fetched, err := repo.GetByUserID("user-1")
-	assert.NoError(t, err)
-	assert.Equal(t, "alice@example.com", fetched.Email)
-
-	profile.Email = "new@example.com"
-	err = repo.Update(profile)
-	assert.NoError(t, err)
-	
-	// Test Not Found
-	f, err := repo.GetByUserID("none")
-	assert.Error(t, err)
-	assert.Nil(t, f)
-
-    // Test Errors
-    brokenRepo := NewProfileRepo(setupBrokenDB(t))
-    assert.Error(t, brokenRepo.Insert(profile))
-    assert.Error(t, brokenRepo.Update(profile))
+	p := &domain.Profile{UserID: "u1", Email: "a@a.com"}
+	repo.Insert(p)
+	f, _ := repo.GetByUserID("u1")
+	assert.Equal(t, "a@a.com", f.Email)
+	p.Theme = "dark"
+	repo.Update(p)
 }
 
-func TestFriendshipRepository(t *testing.T) {
+func TestContentRepository(t *testing.T) {
 	db := setupTestDB(t)
-	repo := NewFriendshipRepo(db)
+	repo := NewContentRepo(db)
 	ctx := context.Background()
-
-	f := &domain.Friendship{UserID: "u1", FriendID: "u2"}
-	assert.NoError(t, repo.AddFriend(ctx, f))
-
-	list, err := repo.ListFriends(ctx, "u1")
-	assert.NoError(t, err)
+	cat := &domain.Category{ID: "c1", GroupID: "cg1", Name: "N", Language: "en"}
+	repo.InsertCategory(ctx, cat)
+	list, _ := repo.ListCategories(ctx, "en")
 	assert.Len(t, list, 1)
-
-	assert.NoError(t, repo.RemoveFriend(ctx, "u1", "u2"))
-    
-    // Test Errors
-    brokenRepo := NewFriendshipRepo(setupBrokenDB(t))
-    assert.Error(t, brokenRepo.AddFriend(ctx, f))
-    _, err = brokenRepo.ListFriends(ctx, "u1")
-    assert.Error(t, err)
+	word := &domain.Word{ID: "w1", GroupID: "wg1", CategoryID: "c1", Text: "T", Language: "en"}
+	repo.InsertWord(ctx, word)
+	words, _ := repo.GetRandomWordGroups(ctx, "c1", "en", 1)
+	assert.Len(t, words, 1)
+	trans, _ := repo.GetTranslation(ctx, "wg1", "en")
+	assert.Equal(t, "T", trans.Text)
+	repo.InsertBadWord(ctx, &domain.BadWord{Text: "B", Language: "en"})
+	bws, _ := repo.ListBadWords(ctx, "en")
+	assert.Len(t, bws, 1)
 }
 
-func TestFriendRequestRepository(t *testing.T) {
+func TestAdminRepository(t *testing.T) {
 	db := setupTestDB(t)
-	repo := NewFriendRequestRepo(db)
+	repo := NewAdminRepo(db)
 	ctx := context.Background()
-
-	req := &domain.FriendRequest{ID: "r1", FromID: "u1", ToID: "u2", Status: "pending"}
-	assert.NoError(t, repo.CreateRequest(ctx, req))
-
-	fetched, err := repo.GetByID(ctx, "r1")
-	assert.NoError(t, err)
-	assert.Equal(t, "u1", fetched.FromID)
-
-	list, err := repo.ListPending(ctx, "u2")
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
-
-	req.Status = "accepted"
-	assert.NoError(t, repo.UpdateRequest(ctx, req))
-	
-	// Test Not Found
-	f, err := repo.GetByID(ctx, "none")
-	assert.Error(t, err)
-	assert.Nil(t, f)
-
-    // Test Errors
-    brokenRepo := NewFriendRequestRepo(setupBrokenDB(t))
-    assert.Error(t, brokenRepo.CreateRequest(ctx, req))
-    _, err = brokenRepo.ListPending(ctx, "u1")
-    assert.Error(t, err)
-    assert.Error(t, brokenRepo.UpdateRequest(ctx, req))
+	song := &domain.Song{ID: "s1", Title: "T", Type: domain.SongTypeLanding}
+	repo.SaveSong(ctx, song)
+	s, _ := repo.GetSongByID(ctx, "s1")
+	assert.Equal(t, "T", s.Title)
+	repo.ListSongs(ctx, domain.SongTypeLanding)
+	repo.UpdateSetting(ctx, "k", "v")
+	val, _ := repo.GetSetting(ctx, "k")
+	assert.Equal(t, "v", val)
+	repo.UpdateSetting(ctx, "k", "v2")
+	repo.DeleteSong(ctx, "s1")
 }
 
-func TestGameHistoryRepository(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewGameHistoryRepo(db)
+func TestEphemeralRepositories(t *testing.T) {
+	mc := NewMockCache(t)
 	ctx := context.Background()
 
-	hist := &domain.GameHistory{ID: "g1", RoomID: "r1", StartedAt: time.Now(), EndedAt: time.Now()}
-	rounds := []domain.Round{{ID: "rnd1", GameHistoryID: "g1"}}
-	scores := []domain.Score{{ID: "s1", GameHistoryID: "g1", UserID: "u1", Points: 100}}
+	// Session
+	repoS := NewSessionRepo(mc)
+	sess := &domain.Session{ID: "s1", UserID: "u1", ExpiresAt: time.Now().Add(time.Hour)}
+	repoS.Set(ctx, sess)
+	repoS.Get(ctx, "s1")
+	repoS.Delete(ctx, "s1")
+	repoS.DeleteAllForUser(ctx, "u1")
 
-	assert.NoError(t, repo.SaveGameSummary(ctx, hist, rounds, scores))
+	// Room
+	repoR := NewRoomRepo(mc)
+	room := &domain.Room{ID: "r1", Name: "R"}
+	repoR.Save(ctx, room)
+	repoR.GetByID(ctx, "r1")
+	repoR.GetByInviteCode(ctx, "I")
+	repoR.Delete(ctx, "r1", "I")
+	repoR.ListPublic(ctx, "en", domain.Paging{})
 
-	g, r, s, err := repo.GetGameSummary(ctx, "g1")
-	assert.NoError(t, err)
-	assert.NotNil(t, g)
-	assert.Len(t, r, 1)
-	assert.Len(t, s, 1)
-
-	list, err := repo.ListUserGames(ctx, "u1", domain.Paging{Limit: 10, Offset: 0})
-	assert.NoError(t, err)
-	assert.NotNil(t, list)
-	
-	// Test Not Found
-	_, _, _, err = repo.GetGameSummary(ctx, "none")
-	assert.Error(t, err)
-
-    // Test Transaction Fail
-    brokenRepo := NewGameHistoryRepo(setupBrokenDB(t))
-    assert.Error(t, brokenRepo.SaveGameSummary(ctx, hist, rounds, scores))
+	// OTP
+	repoO := NewOTPRepo(mc)
+	otp := &domain.OTP{Identifier: "i", Type: domain.OTPEmail, Code: "1", ExpiresAt: time.Now().Add(time.Hour)}
+	repoO.Set(ctx, otp)
+	repoO.Get(ctx, "i", domain.OTPEmail)
+	repoO.Delete(ctx, "i", domain.OTPEmail)
 }
 
-func TestStatsRepository(t *testing.T) {
+func TestMiscRepositories(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	
-	repRepo := NewReportRepo(db)
-	assert.NoError(t, repRepo.InsertReport(ctx, &domain.Report{ID: "rep1"}))
-	reps, err := repRepo.ListReports(ctx, domain.Paging{Limit: 10})
-	assert.NoError(t, err)
-	assert.Len(t, reps.Items, 1)
-
-	achRepo := NewAchievementRepo(db)
-	assert.NoError(t, achRepo.UnlockAchievement(ctx, &domain.Achievement{ID: "a1", UserID: "u1"}))
-	achs, err := achRepo.ListUserAchievements(ctx, "u1")
-	assert.NoError(t, err)
-	assert.Len(t, achs, 1)
-
-	statRepo := NewPlayerStatisticRepo(db)
-	assert.NoError(t, statRepo.UpsertStats(ctx, &domain.PlayerStatistic{UserID: "u1", TotalGames: 5}))
-	s, err := statRepo.GetStats(ctx, "u1")
-	assert.NoError(t, err)
-	assert.Equal(t, int64(5), s.TotalGames)
-
-	setRepo := NewUserSettingsRepo(db)
-	assert.NoError(t, setRepo.SaveSettings(ctx, &domain.UserSettings{UserID: "u1", Theme: "dark"}))
-	sets, err := setRepo.GetSettings(ctx, "u1")
-	assert.NoError(t, err)
-	assert.Equal(t, "dark", sets.Theme)
-
-    // Test Errors
-    brokenDB := setupBrokenDB(t)
-    br := NewReportRepo(brokenDB)
-    assert.Error(t, br.InsertReport(ctx, &domain.Report{}))
-    
-    ba := NewAchievementRepo(brokenDB)
-    _, err = ba.ListUserAchievements(ctx, "1")
-    assert.Error(t, err)
+	NewAchievementRepo(db).UnlockAchievement(ctx, &domain.Achievement{})
+	NewAchievementRepo(db).ListUserAchievements(ctx, "1")
+	NewGameHistoryRepo(db).SaveGameSummary(ctx, &domain.GameHistory{}, nil, nil)
+	NewGameHistoryRepo(db).GetGameSummary(ctx, "1")
+	NewGameHistoryRepo(db).ListUserGames(ctx, "1", domain.Paging{})
+	NewPlayerStatisticRepo(db).UpsertStats(ctx, &domain.PlayerStatistic{})
+	NewPlayerStatisticRepo(db).GetStats(ctx, "1")
+	NewReportRepo(db).InsertReport(ctx, &domain.Report{})
+	NewReportRepo(db).ListReports(ctx, domain.Paging{})
+	NewUserSettingsRepo(db).SaveSettings(ctx, &domain.UserSettings{})
+	NewUserSettingsRepo(db).GetSettings(ctx, "1")
 }

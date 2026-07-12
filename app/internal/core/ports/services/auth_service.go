@@ -12,6 +12,7 @@ import (
 	"drawo/internal/core/domain"
 	"drawo/internal/core/ports/repositories"
 	"drawo/pkg/errors"
+	"drawo/pkg/i18n"
 	"drawo/pkg/security"
 )
 
@@ -129,7 +130,21 @@ func (s *authService) Login(ctx context.Context, username, password, ip, userAge
 		return nil, errors.New(errors.ErrUnauthorized, "invalid username or password")
 	}
 
-	// 4. SUCCESS: Create Session and Tokens
+	// 4. CHECK BAN STATUS: If the user is deactivated, prevent login and show localized message.
+	if !user.IsActive {
+		// Fetch profile to see user's language preference
+		profile, _ := s.profileRepo.GetByUserID(user.ID)
+		lang := "fa" // Default to Persian as requested
+		if profile != nil && profile.Locale != "" {
+			lang = profile.Locale
+		}
+
+		// Use the i18n package to get the "account_banned" message
+		msg := i18n.T(lang, "errors.account_banned")
+		return nil, errors.New(errors.ErrForbidden, msg)
+	}
+
+	// 5. SUCCESS: Create Session and Tokens
 	sessionID := uuid.New().String()
 	tokenID := uuid.New().String() // Initial ID for rotation chain
 

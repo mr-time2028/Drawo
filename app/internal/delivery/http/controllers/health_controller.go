@@ -33,6 +33,10 @@ func (ctrl *HealthController) Ping(c *gin.Context) {
 
 // Health reports the status of every infrastructure dependency.
 func (ctrl *HealthController) Health(c *gin.Context) {
+	if ctrl.Container == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "container not initialized"})
+		return
+	}
 	results := ctrl.Container.Health()
 
 	status := http.StatusOK

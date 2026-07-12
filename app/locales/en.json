@@ -8,7 +8,8 @@
         "not_found": "Item not found",
         "internal_server": "Internal server error",
         "bad_request": "Bad request",
-        "conflict": "Item already exists"
+        "conflict": "Item already exists",
+        "account_banned": "Your account has been banned. Please contact the administrator."
     },
     "game": {
         "welcome": "Welcome to Drawo",

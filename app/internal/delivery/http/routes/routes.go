@@ -6,6 +6,8 @@
 package routes
 
 import (
+	"os"
+
 	"github.com/gin-gonic/gin"
 
 	"drawo/internal/delivery/http/controllers"
@@ -20,6 +22,13 @@ func Register(router *gin.Engine, container *di.Container) {
 	router.Use(middlewares.Logger())
 	router.Use(middlewares.Recovery())
 	router.Use(middlewares.CORS())
+
+	// Serve locally stored uploads when local storage is selected.
+	// The storage provider returns URLs like /uploads/<bucket>/<object>.
+	if container != nil && container.Config.App.Storage.Driver == "local" {
+		_ = os.MkdirAll(container.Config.App.Storage.UploadDirectory, 0755)
+		router.Static("/uploads", container.Config.App.Storage.UploadDirectory)
+	}
 
 	// Health endpoints (no auth).
 	health := controllers.NewHealthController(container)
@@ -52,10 +61,23 @@ func Register(router *gin.Engine, container *di.Container) {
 		}
 
 		// Admin routes example (Phase 5/8)
+		adminCtrl := controllers.NewAdminController(container.Services.Admin)
 		admin := api.Group("/admin")
 		admin.Use(middlewares.RequireAuth(container), middlewares.RequireAdmin())
 		{
-			// admin.GET("/users", adminCtrl.ListUsers)
+			// Song management
+			admin.POST("/songs", adminCtrl.UploadSong)
+			admin.GET("/songs", adminCtrl.ListSongs)
+			admin.PATCH("/songs/:id/toggle", adminCtrl.ToggleSong)
+			admin.DELETE("/songs/:id", adminCtrl.DeleteSong)
+
+			// User management
+			admin.GET("/users/search", adminCtrl.SearchUsers)
+			admin.POST("/users/:id/ban", adminCtrl.BanUser)
+			admin.POST("/users/:id/unban", adminCtrl.UnbanUser)
+
+			// Settings
+			admin.PATCH("/settings/:key", adminCtrl.UpdateSetting)
 		}
 	}
 }

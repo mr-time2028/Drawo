@@ -16,7 +16,7 @@ A production-quality multiplayer drawing and guessing game.
 
 3. Run database migrations (Required on first start):
    ```bash
-   go run . migrate
+   cd app && go run . migrate
    ```
 
 4. Run the Go server:
@@ -29,8 +29,9 @@ A production-quality multiplayer drawing and guessing game.
 ## Configuration
 
 Drawo is configured entirely through environment variables. For local development,
-place them in an `.env` file in the `app/` directory. The file is loaded automatically
-on startup.
+copy `.env.example` to a single `.env` file in the repository root. Docker Compose
+reads this file automatically, and the Go app also loads it when started from the
+`app/` directory.
 
 `.env.example` at the repository root contains every available variable with sensible defaults.
 

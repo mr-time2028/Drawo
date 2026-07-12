@@ -31,6 +31,19 @@ type AppConfig struct {
 	SecretKey      string   `mapstructure:"secretKey"`
 	MigrationsPath string   `mapstructure:"migrationsPath"`
 	Modules        []string `mapstructure:"modules"`
+	Storage        StorageConfig `mapstructure:"storage"`
+}
+
+// StorageConfig handles the dynamic configuration for file storage (MinIO/S3/Local).
+type StorageConfig struct {
+	Driver          string `mapstructure:"driver"` // "minio", "s3", or "local"
+	Endpoint        string `mapstructure:"endpoint"`
+	AccessKey       string `mapstructure:"accessKey"`
+	SecretKey       string `mapstructure:"secretKey"`
+	UseSSL          bool   `mapstructure:"useSSL"`
+	BucketName      string `mapstructure:"bucketName"`
+	Region          string `mapstructure:"region"`
+	UploadDirectory string `mapstructure:"uploadDir"` // Used for local driver
 }
 
 // ServerConfig contains the HTTP server binding.

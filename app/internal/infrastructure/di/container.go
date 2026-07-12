@@ -1,14 +1,16 @@
 // Package di wires the application's dependencies together.
-// This is the "Glue" of the project where infrastructure meets logic.
 package di
 
 import (
 	"context"
+	"fmt"
+
 	"drawo/config"
 	"drawo/internal/core/ports/repositories"
 	"drawo/internal/core/ports/services"
 	"drawo/internal/infrastructure/cache"
 	"drawo/internal/infrastructure/database"
+	"drawo/internal/infrastructure/storage"
 	"drawo/internal/infrastructure/websocket"
 	"drawo/pkg/logger"
 )
@@ -25,32 +27,48 @@ type Container struct {
 	Services Services
 }
 
-// Services groups all high-level application services.
 type Services struct {
 	Auth    services.AuthService
 	User    services.UserService
 	Room    services.RoomService
 	Content services.ContentService
+	Admin   services.AdminService
 }
 
-// NewContainer builds the full dependency graph for the application.
+// NewContainer builds the full dependency graph.
 func NewContainer(cfg config.Config) (*Container, error) {
-	// Initialize logging first so all subsequent errors are tracked correctly.
 	logger.Init(cfg.Log)
 
-	// Establish relational database connectivity.
 	dbConn, err := database.NewConnection(cfg.Database)
 	if err != nil {
 		return nil, err
 	}
 
-	// Establish non-relational (cache/redis) connectivity.
 	cacheClient, err := cache.NewClient(cfg.Cache)
 	if err != nil {
 		return nil, err
 	}
 
-	// 1. Initialize Repositories (Persist data)
+	// -------------------------------------------------------------------------
+	// DYNAMIC STORAGE SWITCHING:
+	// -------------------------------------------------------------------------
+	// Based on the 'cfg.App.Storage.Driver' value in .env, we choose the provider.
+	var storageProvider repositories.FileStorage
+	switch cfg.App.Storage.Driver {
+	case "minio":
+		storageProvider, err = storage.NewMinioProvider(cfg.App.Storage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to init minio: %w", err)
+		}
+	case "local":
+		storageProvider = storage.NewLocalStorageProvider(cfg.App.Storage)
+	default:
+		// Fallback to local for safety during development
+		storageProvider = storage.NewLocalStorageProvider(cfg.App.Storage)
+	}
+	// -------------------------------------------------------------------------
+
+	// 1. Initialize Repositories
 	userRepo := repositories.NewUserRepo(dbConn.DB)
 	profileRepo := repositories.NewProfileRepo(dbConn.DB)
 	_ = repositories.NewFriendshipRepo(dbConn.DB)
@@ -61,13 +79,14 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	_ = repositories.NewPlayerStatisticRepo(dbConn.DB)
 	_ = repositories.NewUserSettingsRepo(dbConn.DB)
 	contentRepo := repositories.NewContentRepo(dbConn.DB)
+	adminRepo := repositories.NewAdminRepo(dbConn.DB)
 
-	// 2. Initialize Specialized Cache Repositories
+	// 2. Initialize specialized cache-based repositories
 	sessionRepo := repositories.NewSessionRepo(cacheClient)
 	roomRepo := repositories.NewRoomRepo(cacheClient)
 	otpRepo := repositories.NewOTPRepo(cacheClient)
 
-	// 3. Initialize Services (Business Logic)
+	// 3. Initialize Services
 	rateLimiter := services.NewRateLimiter(cacheClient)
 	otpSvc := services.NewMockOTPService()
 	contentSvc := services.NewContentService(contentRepo, profileRepo, 100)
@@ -75,8 +94,8 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
 	userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc) 
 	roomSvc := services.NewRoomService(roomRepo)
+	adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider)
 	
-	// WebSocket Hub manages active room goroutines locally and coordinates discovery via Redis.
 	hub := websocket.NewHub(roomRepo)
 
 	return &Container{
@@ -92,19 +111,15 @@ func NewContainer(cfg config.Config) (*Container, error) {
 			User:    userSvc,
 			Room:    roomSvc,
 			Content: contentSvc,
+			Admin:   adminSvc,
 		},
 	}, nil
 }
 
-// Health returns the status of all critical infrastructure components.
 func (c *Container) Health() map[string]error {
 	ctx := context.Background()
 	res := make(map[string]error)
-	if c.DB != nil {
-		res["database"] = c.DB.Health(ctx)
-	}
-	if c.Cache != nil {
-		res["cache"] = c.Cache.Health(ctx)
-	}
+	if c.DB != nil { res["database"] = c.DB.Health(ctx) }
+	if c.Cache != nil { res["cache"] = c.Cache.Health(ctx) }
 	return res
 }

@@ -13,11 +13,13 @@ import "time"
 //   change frequently. Splitting them reduces lock contention and keeps the
 //   auth path lightweight. They share the same ID (1:1 relationship).
 type User struct {
-	ID          string
-	Username    string
+	ID           string
+	Username     string
 	PasswordHash string
-	IsActive    bool
-	IsSuperuser bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	IsActive     bool
+	IsSuperuser  bool
+	BanCount     int        // How many times this user has been banned
+	BannedAt     *time.Time // Timestamp of the most recent ban
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }

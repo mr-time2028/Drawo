@@ -9,9 +9,9 @@ import (
 // setDefaults registers default values for every configuration key.
 //
 // Defaults are overridden by (in order of precedence):
-//   1. Environment variables (e.g., DRAWO_SERVER_PORT)
-//   2. .env file
-//   3. Explicit values set in tests before calling Load()
+//  1. Environment variables (e.g., DRAWO_SERVER_PORT)
+//  2. .env file
+//  3. Explicit values set in tests before calling Load()
 //
 // We use the mapstructure keys here because Viper binds env vars to those keys.
 func setDefaults() {
@@ -21,6 +21,14 @@ func setDefaults() {
 	viper.SetDefault("app.secretKey", "change-me-in-production")
 	viper.SetDefault("app.migrationsPath", "migrations")
 	viper.SetDefault("app.modules", []string{"user", "auth", "room", "game", "admin"})
+	viper.SetDefault("app.storage.driver", "local")
+	viper.SetDefault("app.storage.endpoint", "localhost:9000")
+	viper.SetDefault("app.storage.accessKey", "admin")
+	viper.SetDefault("app.storage.secretKey", "change-me-minio-password")
+	viper.SetDefault("app.storage.useSSL", false)
+	viper.SetDefault("app.storage.bucketName", "drawo")
+	viper.SetDefault("app.storage.region", "us-east-1")
+	viper.SetDefault("app.storage.uploadDir", "uploads")
 
 	// Server
 	viper.SetDefault("server.host", "0.0.0.0")
