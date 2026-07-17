@@ -1,15 +1,84 @@
+# Development Compose file.
+#
+# Responsibility:
+#   - Run only the backing services (PostgreSQL, Redis) in Docker.
+#   - MinIO is kept below as a commented optional service for future object storage use.
+#   - Let the Go app run locally for fast rebuilds and debugger attachment.
+#
+# Usage:
+#   make dev-up
+#   cd app && go run . serve
+#
+# Docker Compose automatically reads the repository-root .env file for ${...}
+# interpolation. We keep one application-facing set of values in .env and map
+# them to official image variable names only inside this Compose file.
 services:
   postgres:
-    container_name: 'dev_drawo_postgres'
-    image: postgres:17
+    container_name: dev_drawo_postgres
+    image: postgres:17-alpine
     ports:
-      - '5432:5432'
+      - "${DRAWO_DATABASE_PORT}:5432"
     volumes:
-      - postgres-data:/var/lib/data/postgresql
+      - postgres_data_dev:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=drawo
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=123456
+      POSTGRES_DB: ${DRAWO_DATABASE_NAME}
+      POSTGRES_USER: ${DRAWO_DATABASE_USER}
+      POSTGRES_PASSWORD: ${DRAWO_DATABASE_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: dev_drawo_redis
+    image: redis:7-alpine
+    ports:
+      - "${DRAWO_REDIS_PORT}:6379"
+    environment:
+      REDIS_PASSWORD: ${DRAWO_REDIS_PASSWORD}
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        redis-server --requirepass "$$REDIS_PASSWORD";
+      else
+        redis-server;
+      fi'
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Optional MinIO object storage service
+  # ---------------------------------------------------------------------------
+  # Local storage is currently enabled via:
+  #   DRAWO_APP_STORAGE_DRIVER=local
+  #
+  # Keep this service commented while using local storage. To switch back to
+  # MinIO later:
+  #   1. Set DRAWO_APP_STORAGE_DRIVER=minio in .env
+  #   2. Set DRAWO_APP_STORAGE_ENDPOINT=localhost:9000 for local Go app + dev compose
+  #   3. Uncomment this service
+  #   4. Uncomment minio_data_dev volume below
+  #
+  # minio:
+  #   image: minio/minio
+  #   container_name: drawo_storage_dev
+  #   ports:
+  #     - "${DRAWO_MINIO_API_PORT}:9000"
+  #     - "${DRAWO_MINIO_CONSOLE_PORT}:9001"
+  #   environment:
+  #     MINIO_ROOT_USER: ${DRAWO_APP_STORAGE_ACCESSKEY}
+  #     MINIO_ROOT_PASSWORD: ${DRAWO_APP_STORAGE_SECRETKEY}
+  #   command: server /data --console-address ":9001"
+  #   volumes:
+  #     - minio_data_dev:/data
 
 volumes:
-  postgres-data:
+  postgres_data_dev:
+  # minio_data_dev:

@@ -1,10 +1,28 @@
+# Multi-stage Dockerfile for the Drawo Go backend.
+
 FROM golang:1.24-alpine AS builder
-RUN mkdir app
+
+RUN apk add --no-cache git make
+
 WORKDIR /app
-COPY ./app .
-RUN go mod download && go mod verify
-RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-RUN CGO_ENABLED=0 go build -o main .
-RUN chmod +x ./main
+
+# Cache dependencies.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source and build.
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o drawo .
+
+# Final minimal image.
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates wget
+
+WORKDIR /app
+
+COPY --from=builder /app/drawo .
+
 EXPOSE 8080
-CMD ["./main", "serve"]
+
+CMD ["./drawo", "serve"]

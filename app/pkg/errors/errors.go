@@ -1,89 +1,105 @@
+// Package errors defines application-wide error types and HTTP response helpers.
+//
+// Responsibility:
+//   - Provide sentinel errors that business logic can return.
+//   - Map those errors to HTTP status codes and JSON responses.
+//   - Keep HTTP concerns out of domain/application packages.
+//
+// Why not use the standard errors package everywhere?
+//   Sentinel errors make it easy for controllers to decide status codes without
+//   parsing strings. The application layer stays framework-agnostic.
 package errors
 
 import (
-	"drawo/pkg/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
-	"io"
 	"net/http"
-	"reflect"
-	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
-var errorsList map[string][]string
+// Sentinel errors returned by the application layer.
+var (
+	ErrInternalServer   = errors.New("internal server error")
+	ErrBadRequest       = errors.New("bad request")
+	ErrUnauthorized     = errors.New("unauthorized")
+	ErrForbidden        = errors.New("forbidden")
+	ErrNotFound         = errors.New("not found")
+	ErrConflict         = errors.New("conflict")
+	ErrTooManyRequests  = errors.New("too many requests")
+	ErrValidationFailed = errors.New("validation failed")
+)
 
-func Init() {
-	errorsList = make(map[string][]string)
-}
-
-func Add(key string, value string) {
-	errorsList[strings.ToLower(key)] = append(errorsList[strings.ToLower(key)], value)
-}
-
-func GetErrorMessage(tag string) string {
-	return ErrorMessages()[tag]
-}
-
-func Get() map[string][]string {
-	return errorsList
-}
-
-func SetFromErrors(err error, obj interface{}) {
-	var validationErrors validator.ValidationErrors
-
-	if errors.As(err, &validationErrors) {
-		structType := reflect.TypeOf(obj)
-
-		for _, fieldError := range validationErrors {
-			jsonTag := json.GetJSONTag(structType, fieldError.StructField())
-			Add(jsonTag, GetErrorMessage(fieldError.Tag()))
-		}
-	}
-}
-
-type TypedError struct {
-	Error   error
+// AppError pairs a sentinel error with a user-facing message and optional field.
+//
+// This is the only error type HTTP controllers should receive from 
+// Keeping the original sentinel error lets the controller map it to a status code,
+// while the message is safe to show to the user.
+type AppError struct {
+	Err     error
 	Field   string
 	Message string
 }
 
-func HandleTypedError(sErr *TypedError) (status int, message *gin.H) {
-	var c int
-	var m *gin.H
-
-	if sErr.Field == "" {
-		m = &gin.H{"message": sErr.Message}
-	} else {
-		m = &gin.H{"message": gin.H{sErr.Field: []string{sErr.Message}}}
-	}
-
-	switch sErr.Error {
-	case BadRequestErr:
-		c = http.StatusBadRequest
-	case UnauthorizedErr:
-		c = http.StatusUnauthorized
-	case InternalServerErr:
-		c = http.StatusInternalServerError
-		m = &gin.H{"message": InternalServerErr.Error()}
-		fmt.Println(sErr.Error.Error(), ":", sErr.Message)
-	}
-
-	return c, m
+func (e *AppError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Err.Error(), e.Message)
 }
 
-func HandleJsonError(err error, obj any) (status int, message *gin.H) {
-	Init()
-	SetFromErrors(err, obj)
-	validationErr := Get()
+// New creates a new AppError.
+func New(err error, message string) *AppError {
+	return &AppError{Err: err, Message: message}
+}
 
-	if validationErr != nil && len(validationErr) > 0 {
-		return http.StatusBadRequest, &gin.H{"message": validationErr}
-	} else {
-		if err == io.EOF {
-			return http.StatusBadRequest, &gin.H{"message": "request body cannot be empty"}
-		}
-		return http.StatusBadRequest, &gin.H{"message": err.Error()}
+// Newf creates a new AppError with a formatted message.
+func Newf(err error, format string, args ...interface{}) *AppError {
+	return &AppError{Err: err, Message: fmt.Sprintf(format, args...)}
+}
+
+// WithField adds a field name to an AppError (useful for validation errors).
+func (e *AppError) WithField(field string) *AppError {
+	e.Field = field
+	return e
+}
+
+// Response builds a Gin response from an AppError.
+func (e *AppError) Response() (int, gin.H) {
+	status := mapStatus(e.Err)
+
+	if status == http.StatusInternalServerError {
+		// Never leak internal details on 500 responses.
+		return status, gin.H{"message": "internal server error"}
 	}
+
+	if e.Field != "" {
+		return status, gin.H{"message": gin.H{e.Field: []string{e.Message}}}
+	}
+
+	return status, gin.H{"message": e.Message}
+}
+
+// mapStatus converts sentinel errors to HTTP status codes.
+func mapStatus(err error) int {
+	switch {
+	case errors.Is(err, ErrBadRequest):
+		return http.StatusBadRequest
+	case errors.Is(err, ErrValidationFailed):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, ErrUnauthorized):
+		return http.StatusUnauthorized
+	case errors.Is(err, ErrForbidden):
+		return http.StatusForbidden
+	case errors.Is(err, ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, ErrConflict):
+		return http.StatusConflict
+	case errors.Is(err, ErrTooManyRequests):
+		return http.StatusTooManyRequests
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// ValidationError builds a 422-style validation response from a field map.
+func ValidationError(fieldErrors map[string][]string) (int, gin.H) {
+	return http.StatusUnprocessableEntity, gin.H{"message": fieldErrors}
 }
