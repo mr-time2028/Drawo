@@ -59,7 +59,7 @@
 				
 				<option value="file1">drawo/cmd/root.go (0.0%)</option>
 				
-				<option value="file2">drawo/cmd/serve.go (8.3%)</option>
+				<option value="file2">drawo/cmd/serve.go (21.4%)</option>
 				
 				<option value="file3">drawo/config/config.go (100.0%)</option>
 				
@@ -131,43 +131,51 @@
 				
 				<option value="file37">drawo/internal/delivery/http/middlewares/request_id.go (100.0%)</option>
 				
-				<option value="file38">drawo/internal/delivery/http/routes/routes.go (100.0%)</option>
+				<option value="file38">drawo/internal/delivery/http/routes/routes.go (95.0%)</option>
 				
-				<option value="file39">drawo/internal/delivery/http/server.go (26.7%)</option>
+				<option value="file39">drawo/internal/delivery/websocket/controller.go (0.0%)</option>
 				
-				<option value="file40">drawo/internal/infrastructure/cache/cache.go (88.9%)</option>
+				<option value="file40">drawo/internal/delivery/websocket/routes.go (0.0%)</option>
 				
-				<option value="file41">drawo/internal/infrastructure/cache/memory.go (100.0%)</option>
+				<option value="file41">drawo/internal/infrastructure/cache/cache.go (88.9%)</option>
 				
-				<option value="file42">drawo/internal/infrastructure/cache/redis.go (90.9%)</option>
+				<option value="file42">drawo/internal/infrastructure/cache/memory.go (100.0%)</option>
 				
-				<option value="file43">drawo/internal/infrastructure/database/connection.go (90.0%)</option>
+				<option value="file43">drawo/internal/infrastructure/cache/redis.go (90.9%)</option>
 				
-				<option value="file44">drawo/internal/infrastructure/database/migrate.go (43.0%)</option>
+				<option value="file44">drawo/internal/infrastructure/database/connection.go (90.0%)</option>
 				
-				<option value="file45">drawo/internal/infrastructure/di/container.go (20.5%)</option>
+				<option value="file45">drawo/internal/infrastructure/database/migrate.go (43.0%)</option>
 				
-				<option value="file46">drawo/internal/infrastructure/storage/local.go (82.4%)</option>
+				<option value="file46">drawo/internal/infrastructure/di/container.go (20.5%)</option>
 				
-				<option value="file47">drawo/internal/infrastructure/storage/minio.go (52.6%)</option>
+				<option value="file47">drawo/internal/infrastructure/storage/local.go (82.4%)</option>
 				
-				<option value="file48">drawo/internal/infrastructure/websocket/hub.go (100.0%)</option>
+				<option value="file48">drawo/internal/infrastructure/storage/minio.go (52.6%)</option>
 				
-				<option value="file49">drawo/internal/infrastructure/websocket/room.go (90.9%)</option>
+				<option value="file49">drawo/internal/realtime/auth.go (84.2%)</option>
 				
-				<option value="file50">drawo/main.go (0.0%)</option>
+				<option value="file50">drawo/internal/realtime/events.go (92.3%)</option>
 				
-				<option value="file51">drawo/pkg/errors/errors.go (100.0%)</option>
+				<option value="file51">drawo/internal/realtime/handler.go (67.3%)</option>
 				
-				<option value="file52">drawo/pkg/i18n/i18n.go (81.4%)</option>
+				<option value="file52">drawo/internal/realtime/hub.go (91.5%)</option>
 				
-				<option value="file53">drawo/pkg/logger/logger.go (95.7%)</option>
+				<option value="file53">drawo/internal/realtime/room.go (85.5%)</option>
 				
-				<option value="file54">drawo/pkg/security/jwt.go (78.9%)</option>
+				<option value="file54">drawo/main.go (0.0%)</option>
 				
-				<option value="file55">drawo/pkg/security/password.go (77.8%)</option>
+				<option value="file55">drawo/pkg/errors/errors.go (100.0%)</option>
 				
-				<option value="file56">drawo/pkg/validator/validator.go (92.9%)</option>
+				<option value="file56">drawo/pkg/i18n/i18n.go (81.4%)</option>
+				
+				<option value="file57">drawo/pkg/logger/logger.go (95.7%)</option>
+				
+				<option value="file58">drawo/pkg/security/jwt.go (80.0%)</option>
+				
+				<option value="file59">drawo/pkg/security/password.go (77.8%)</option>
+				
+				<option value="file60">drawo/pkg/validator/validator.go (92.9%)</option>
 				
 				</select>
 			</div>
@@ -332,12 +340,21 @@ func Execute() <span class="cov0" title="0">{
 		<pre class="file" id="file2" style="display: none">package cmd
 
 import (
+        "context"
+        "fmt"
         "log/slog"
+        "net/http"
+        "os"
+        "os/signal"
+        "syscall"
+        "time"
 
+        "github.com/gin-gonic/gin"
         "github.com/spf13/cobra"
 
         "drawo/config"
-        "drawo/internal/delivery/http"
+        httpRoutes "drawo/internal/delivery/http/routes"
+        wsRoutes "drawo/internal/delivery/websocket"
         "drawo/internal/infrastructure/di"
         "drawo/pkg/logger"
 )
@@ -375,8 +392,59 @@ func serve() error <span class="cov0" title="0">{
         )
 
         // Start the HTTP server. This blocks until shutdown.
-        server := http.NewServer(cfg.Server, container)
-        return server.Run()</span>
+        server := newServer(cfg.Server, container)
+        return server.run()</span>
+}
+
+// server wraps the Gin engine and net/http server for the `serve` command.
+//
+// This lives in cmd because starting/stopping the HTTP process is application
+// bootstrap behavior. The delivery layer still owns controllers, middleware,
+// and route registration; cmd only wires those adapters into an executable
+// server process.
+type server struct {
+        httpServer *http.Server
+}
+
+// newServer creates a configured Gin server with all routes registered.
+func newServer(cfg config.ServerConfig, container *di.Container) *server <span class="cov8" title="1">{
+        // Release mode hides stack traces from HTTP responses.
+        gin.SetMode(gin.ReleaseMode)
+
+        router := gin.New()
+        httpRoutes.Register(router, container)
+        wsRoutes.Register(router, container)
+
+        return &amp;server{
+                httpServer: &amp;http.Server{
+                        Addr:    fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+                        Handler: router,
+                },
+        }
+}</span>
+
+// run starts the server and blocks until it is shut down.
+//
+// It listens for SIGINT/SIGTERM and performs a graceful shutdown with a
+// 5-second timeout.
+func (s *server) run() error <span class="cov0" title="0">{
+        go func() </span><span class="cov0" title="0">{
+                logger.L.Info("starting http server", slog.String("addr", s.httpServer.Addr))
+                if err := s.httpServer.ListenAndServe(); err != nil &amp;&amp; err != http.ErrServerClosed </span><span class="cov0" title="0">{
+                        logger.L.Error("http server error", slog.Any("error", err))
+                }</span>
+        }()
+
+        <span class="cov0" title="0">quit := make(chan os.Signal, 1)
+        signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+        &lt;-quit
+
+        logger.L.Info("shutting down http server")
+
+        ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+
+        return s.httpServer.Shutdown(ctx)</span>
 }
 </pre>
 		
@@ -501,9 +569,9 @@ import (
 // setDefaults registers default values for every configuration key.
 //
 // Defaults are overridden by (in order of precedence):
-//   1. Environment variables (e.g., DRAWO_SERVER_PORT)
-//   2. .env file
-//   3. Explicit values set in tests before calling Load()
+//  1. Environment variables (e.g., DRAWO_SERVER_PORT)
+//  2. .env file
+//  3. Explicit values set in tests before calling Load()
 //
 // We use the mapstructure keys here because Viper binds env vars to those keys.
 func setDefaults() <span class="cov8" title="1">{
@@ -513,6 +581,14 @@ func setDefaults() <span class="cov8" title="1">{
         viper.SetDefault("app.secretKey", "change-me-in-production")
         viper.SetDefault("app.migrationsPath", "migrations")
         viper.SetDefault("app.modules", []string{"user", "auth", "room", "game", "admin"})
+        viper.SetDefault("app.storage.driver", "local")
+        viper.SetDefault("app.storage.endpoint", "localhost:9000")
+        viper.SetDefault("app.storage.accessKey", "admin")
+        viper.SetDefault("app.storage.secretKey", "change-me-minio-password")
+        viper.SetDefault("app.storage.useSSL", false)
+        viper.SetDefault("app.storage.bucketName", "drawo")
+        viper.SetDefault("app.storage.region", "us-east-1")
+        viper.SetDefault("app.storage.uploadDir", "uploads")
 
         // Server
         viper.SetDefault("server.host", "0.0.0.0")
@@ -1856,7 +1932,7 @@ func (s *authService) Login(ctx context.Context, username, password, ip, userAge
 // Refresh handles token rotation and detects potential theft/reuse.
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (*domain.TokenPair, error) <span class="cov8" title="1">{
         // 1. Parse and validate the Refresh Token
-        claims, err := s.jwt.ParseToken(refreshToken)
+        claims, err := s.jwt.ParseRefreshToken(refreshToken)
         if err != nil </span><span class="cov8" title="1">{
                 return nil, errors.New(errors.ErrUnauthorized, "invalid or expired refresh token")
         }</span>
@@ -1903,7 +1979,7 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*domain
 // Logout terminates the session and revokes all tokens instantly.
 func (s *authService) Logout(ctx context.Context, accessToken string) error <span class="cov8" title="1">{
         // 1. Parse token (even if expired, we want the SID to clean up Redis)
-        claims, _ := s.jwt.ParseToken(accessToken)
+        claims, _ := s.jwt.ParseAccessToken(accessToken)
         if claims == nil </span><span class="cov0" title="0">{
                 return nil // Already invalid
         }</span>
@@ -2938,7 +3014,7 @@ func RequireAuth(container *di.Container) gin.HandlerFunc <span class="cov8" tit
                 <span class="cov8" title="1">tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
                 // 2. Parse and Validate JWT Signature
-                claims, err := jwt.ParseToken(tokenStr)
+                claims, err := jwt.ParseAccessToken(tokenStr)
                 if err != nil </span><span class="cov8" title="1">{
                         c.AbortWithStatusJSON(errors.New(errors.ErrUnauthorized, "invalid or expired token").Response())
                         return
@@ -3137,6 +3213,8 @@ func RequestID() gin.HandlerFunc <span class="cov8" title="1">{
 package routes
 
 import (
+        "os"
+
         "github.com/gin-gonic/gin"
 
         "drawo/internal/delivery/http/controllers"
@@ -3152,8 +3230,15 @@ func Register(router *gin.Engine, container *di.Container) <span class="cov8" ti
         router.Use(middlewares.Recovery())
         router.Use(middlewares.CORS())
 
+        // Serve locally stored uploads when local storage is selected.
+        // The storage provider returns URLs like /uploads/&lt;bucket&gt;/&lt;object&gt;.
+        if container != nil &amp;&amp; container.Config.App.Storage.Driver == "local" </span><span class="cov0" title="0">{
+                _ = os.MkdirAll(container.Config.App.Storage.UploadDirectory, 0755)
+                router.Static("/uploads", container.Config.App.Storage.UploadDirectory)
+        }</span>
+
         // Health endpoints (no auth).
-        health := controllers.NewHealthController(container)
+        <span class="cov8" title="1">health := controllers.NewHealthController(container)
         router.GET("/health/ping", health.Ping)
         router.GET("/health", health.Health)
 
@@ -3205,78 +3290,59 @@ func Register(router *gin.Engine, container *di.Container) <span class="cov8" ti
 }
 </pre>
 		
-		<pre class="file" id="file39" style="display: none">// Package http (internal/delivery/http) bootstraps the Gin HTTP server.
+		<pre class="file" id="file39" style="display: none">// Package websocket exposes Drawo's realtime WebSocket delivery adapter.
 //
-// Responsibility:
-//   - Create and configure the Gin engine.
-//   - Register routes.
-//   - Start and stop the server gracefully.
-package http
+// WebSocket starts with an HTTP Upgrade request, but after the upgrade it is a
+// separate realtime protocol. Keeping this adapter outside delivery/http makes
+// the project easier to navigate: HTTP REST routes stay in delivery/http and
+// realtime WebSocket routes stay here.
+package websocket
 
 import (
-        "context"
-        "fmt"
-        "log/slog"
-        "net/http"
-        "os"
-        "os/signal"
-        "syscall"
-        "time"
-
         "github.com/gin-gonic/gin"
 
         "drawo/config"
-        "drawo/internal/delivery/http/routes"
-        "drawo/internal/infrastructure/di"
-        "drawo/pkg/logger"
+        "drawo/internal/core/ports/repositories"
+        "drawo/internal/realtime"
 )
 
-// Server wraps the Gin engine and HTTP server.
-type Server struct {
-        httpServer *http.Server
+// Controller is intentionally thin: all protocol, authentication, heartbeat,
+// re-authentication, and room dispatch rules live in internal/realtime.
+type Controller struct {
+        handler *realtime.Handler
 }
 
-// NewServer creates a configured Gin server with all routes registered.
-func NewServer(cfg config.ServerConfig, container *di.Container) *Server <span class="cov8" title="1">{
-        // Release mode hides stack traces from HTTP responses.
-        gin.SetMode(gin.ReleaseMode)
-
-        router := gin.New()
-        routes.Register(router, container)
-
-        return &amp;Server{
-                httpServer: &amp;http.Server{
-                        Addr:    fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
-                        Handler: router,
-                },
-        }
+func NewController(cfg config.Config, hub *realtime.Hub, sessions repositories.SessionRepository) *Controller <span class="cov0" title="0">{
+        return &amp;Controller{handler: realtime.NewHandler(cfg, hub, sessions)}
 }</span>
 
-// Run starts the server and blocks until it is shut down.
-//
-// It listens for SIGINT/SIGTERM and performs a graceful shutdown with a 5-second timeout.
-func (s *Server) Run() error <span class="cov0" title="0">{
-        go func() </span><span class="cov0" title="0">{
-                logger.L.Info("starting http server", slog.String("addr", s.httpServer.Addr))
-                if err := s.httpServer.ListenAndServe(); err != nil &amp;&amp; err != http.ErrServerClosed </span><span class="cov0" title="0">{
-                        logger.L.Error("http server error", slog.Any("error", err))
-                }</span>
-        }()
-
-        <span class="cov0" title="0">quit := make(chan os.Signal, 1)
-        signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-        &lt;-quit
-
-        logger.L.Info("shutting down http server")
-
-        ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-        defer cancel()
-
-        return s.httpServer.Shutdown(ctx)</span>
-}
+// Connect upgrades GET /api/v1/ws to a WebSocket connection.
+// The first client frame must be auth, then join.
+func (ctrl *Controller) Connect(c *gin.Context) <span class="cov0" title="0">{
+        ctrl.handler.ServeHTTP(c.Writer, c.Request)
+}</span>
 </pre>
 		
-		<pre class="file" id="file40" style="display: none">package cache
+		<pre class="file" id="file40" style="display: none">package websocket
+
+import (
+        "github.com/gin-gonic/gin"
+
+        "drawo/internal/infrastructure/di"
+)
+
+// Register attaches realtime WebSocket routes to the main Gin engine.
+//
+// The endpoint is still mounted on the same HTTP server because WebSocket starts
+// as an HTTP Upgrade request, but the route lives in delivery/websocket to keep
+// protocol boundaries clear.
+func Register(router *gin.Engine, container *di.Container) <span class="cov0" title="0">{
+        ctrl := NewController(container.Config, container.Hub, container.Sessions)
+        router.GET("/api/v1/ws", ctrl.Connect)
+}</span>
+</pre>
+		
+		<pre class="file" id="file41" style="display: none">package cache
 
 import (
         "fmt"
@@ -3313,7 +3379,7 @@ func init() <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file41" style="display: none">package cache
+		<pre class="file" id="file42" style="display: none">package cache
 
 import (
         "context"
@@ -3391,7 +3457,7 @@ func (m *MemoryClient) Health(ctx context.Context) error <span class="cov8" titl
 var _ repositories.CacheRepository = (*MemoryClient)(nil)
 </pre>
 		
-		<pre class="file" id="file42" style="display: none">package cache
+		<pre class="file" id="file43" style="display: none">package cache
 
 import (
         "context"
@@ -3450,7 +3516,7 @@ func (r *RedisClient) Health(ctx context.Context) error <span class="cov8" title
 var _ repositories.CacheRepository = (*RedisClient)(nil)
 </pre>
 		
-		<pre class="file" id="file43" style="display: none">// Package database provides relational database connectivity for the application.
+		<pre class="file" id="file44" style="display: none">// Package database provides relational database connectivity for the application.
 //
 // Responsibility:
 //   - Open and configure a database connection using GORM dialectors based on config.
@@ -3565,7 +3631,7 @@ func (c *Connection) Health(ctx context.Context) error <span class="cov8" title=
 var _ repositories.HealthReporter = (*Connection)(nil)
 </pre>
 		
-		<pre class="file" id="file44" style="display: none">package database
+		<pre class="file" id="file45" style="display: none">package database
 
 import (
         "errors"
@@ -4036,7 +4102,7 @@ func (m *MigrationManager) getFriendlyName(filename string) string <span class="
 }
 </pre>
 		
-		<pre class="file" id="file45" style="display: none">// Package di wires the application's dependencies together.
+		<pre class="file" id="file46" style="display: none">// Package di wires the application's dependencies together.
 package di
 
 import (
@@ -4049,7 +4115,7 @@ import (
         "drawo/internal/infrastructure/cache"
         "drawo/internal/infrastructure/database"
         "drawo/internal/infrastructure/storage"
-        "drawo/internal/infrastructure/websocket"
+        "drawo/internal/realtime"
         "drawo/pkg/logger"
 )
 
@@ -4061,7 +4127,7 @@ type Container struct {
         Sessions repositories.SessionRepository
         OTPs     repositories.OTPRepository
         Limiter  services.RateLimiter
-        Hub      *websocket.Hub
+        Hub      *realtime.Hub
         Services Services
 }
 
@@ -4128,13 +4194,13 @@ func NewContainer(cfg config.Config) (*Container, error) <span class="cov8" titl
         rateLimiter := services.NewRateLimiter(cacheClient)
         otpSvc := services.NewMockOTPService()
         contentSvc := services.NewContentService(contentRepo, profileRepo, 100)
-        
+
         authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
-        userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc) 
+        userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc)
         roomSvc := services.NewRoomService(roomRepo)
         adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider)
-        
-        hub := websocket.NewHub(roomRepo)
+
+        hub := realtime.NewHub(roomRepo)
 
         return &amp;Container{
                 Config:   cfg,
@@ -4157,13 +4223,17 @@ func NewContainer(cfg config.Config) (*Container, error) <span class="cov8" titl
 func (c *Container) Health() map[string]error <span class="cov8" title="1">{
         ctx := context.Background()
         res := make(map[string]error)
-        if c.DB != nil </span><span class="cov0" title="0">{ res["database"] = c.DB.Health(ctx) }</span>
-        <span class="cov8" title="1">if c.Cache != nil </span><span class="cov0" title="0">{ res["cache"] = c.Cache.Health(ctx) }</span>
+        if c.DB != nil </span><span class="cov0" title="0">{
+                res["database"] = c.DB.Health(ctx)
+        }</span>
+        <span class="cov8" title="1">if c.Cache != nil </span><span class="cov0" title="0">{
+                res["cache"] = c.Cache.Health(ctx)
+        }</span>
         <span class="cov8" title="1">return res</span>
 }
 </pre>
 		
-		<pre class="file" id="file46" style="display: none">// Package storage provides concrete implementations of the FileStorage port.
+		<pre class="file" id="file47" style="display: none">// Package storage provides concrete implementations of the FileStorage port.
 package storage
 
 import (
@@ -4233,7 +4303,7 @@ func (p *LocalStorageProvider) GetURL(ctx context.Context, bucketName, objectNam
 var _ repositories.FileStorage = (*LocalStorageProvider)(nil)
 </pre>
 		
-		<pre class="file" id="file47" style="display: none">package storage
+		<pre class="file" id="file48" style="display: none">package storage
 
 import (
         "context"
@@ -4320,7 +4390,664 @@ func (p *MinioProvider) GetURL(ctx context.Context, bucketName, objectName strin
 var _ repositories.FileStorage = (*MinioProvider)(nil)
 </pre>
 		
-		<pre class="file" id="file48" style="display: none">package websocket
+		<pre class="file" id="file49" style="display: none">package realtime
+
+import (
+        "context"
+        "fmt"
+
+        "drawo/config"
+        "drawo/internal/core/ports/repositories"
+        "drawo/pkg/security"
+)
+
+// Authenticator centralizes WebSocket token validation.
+//
+// WebSocket connections are long-lived, so we validate a short-lived access
+// token during the initial handshake and again during re-auth. The socket is
+// also tied to the server-side session, so logout/ban/reuse detection can revoke
+// the connection even before the access token naturally expires.
+type Authenticator struct {
+        jwt      *security.JWTManager
+        sessions repositories.SessionRepository
+}
+
+func NewAuthenticator(cfg config.Config, sessions repositories.SessionRepository) *Authenticator <span class="cov8" title="1">{
+        return &amp;Authenticator{
+                jwt: security.NewJWTManager(
+                        cfg.App.SecretKey,
+                        cfg.Auth.Issuer,
+                        cfg.Auth.AccessTokenExpiry,
+                        cfg.Auth.RefreshTokenExpiry,
+                ),
+                sessions: sessions,
+        }
+}</span>
+
+func (a *Authenticator) AuthenticateAccessToken(ctx context.Context, token string) (*AuthContext, error) <span class="cov8" title="1">{
+        claims, err := a.jwt.ParseAccessToken(token)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("invalid access token: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">session, err := a.sessions.Get(ctx, claims.SessionID)
+        if err != nil || session == nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("session no longer active")
+        }</span>
+        <span class="cov8" title="1">if session.UserID != claims.UserID </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("token/session user mismatch")
+        }</span>
+        <span class="cov8" title="1">if session.IsExpired() </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("session expired")
+        }</span>
+        <span class="cov8" title="1">if claims.ExpiresAt == nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("access token expiry missing")
+        }</span>
+
+        <span class="cov8" title="1">return &amp;AuthContext{
+                UserID:          claims.UserID,
+                SessionID:       claims.SessionID,
+                TokenID:         claims.TokenID,
+                AccessExpiresAt: claims.ExpiresAt.Time,
+        }, nil</span>
+}
+
+func (a *Authenticator) SessionActive(ctx context.Context, auth *AuthContext) bool <span class="cov8" title="1">{
+        if auth == nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov8" title="1">userID, sessionID, _, _ := auth.Snapshot()
+        session, err := a.sessions.Get(ctx, sessionID)
+        return err == nil &amp;&amp; session != nil &amp;&amp; session.UserID == userID &amp;&amp; !session.IsExpired()</span>
+}
+</pre>
+		
+		<pre class="file" id="file50" style="display: none">// Package websocket manages real-time multiplayer connections and event-driven ephemeral rooms.
+package realtime
+
+import (
+        "encoding/json"
+        "sync"
+        "time"
+
+        "github.com/gorilla/websocket"
+)
+
+// EventType defines the category of a real-time message inside an ephemeral room.
+type EventType string
+
+const (
+        // Client-to-server protocol events.
+        EventAuth  EventType = "auth"  // First frame authenticates; later frames re-auth/update access token.
+        EventJoin  EventType = "join"  // Join an ephemeral room after authentication.
+        EventLeave EventType = "leave" // Leave current room gracefully.
+        EventChat  EventType = "chat"  // Chat/guess message. Guess rules arrive in later phases.
+        EventDraw  EventType = "draw"  // Drawing operation payload.
+        EventGame  EventType = "game"  // Generic game-state command/event namespace.
+
+        // Server-to-client protocol events.
+        EventAuthOK       EventType = "auth_ok"
+        EventAuthRequired EventType = "auth_required" // Server asks client to refresh access token in background.
+        EventJoined       EventType = "joined"
+        EventLeft         EventType = "left"
+        EventError        EventType = "error"
+        EventGameState    EventType = "game_state"
+        EventClearCanvas  EventType = "clear_canvas"
+)
+
+// MessageEnvelope is the standard JSON frame sent in both directions.
+//
+// Security/design notes:
+//   - All application frames must use this envelope. We never accept arbitrary
+//     untyped JSON because it makes validation and rate-limiting ambiguous.
+//   - Payload is json.RawMessage so the room loop can forward draw/chat/game
+//     payloads without double-encoding or base64-encoding []byte.
+//   - Seq is client-controlled and echoed for client-side ordering/debugging;
+//     the server does not trust it for authorization.
+type MessageEnvelope struct {
+        Type      EventType       `json:"type"`
+        Payload   json.RawMessage `json:"payload,omitempty"`
+        Seq       int64           `json:"seq,omitempty"`
+        Timestamp int64           `json:"timestamp,omitempty"`
+}
+
+// AuthPayload is used for both the first auth frame and later re-auth frames.
+// Tokens are sent inside the WebSocket body instead of query params to avoid
+// leaking credentials in access logs.
+type AuthPayload struct {
+        AccessToken string `json:"access_token"`
+}
+
+// JoinPayload identifies the room to join after authentication.
+type JoinPayload struct {
+        RoomID string `json:"room_id"`
+}
+
+// ErrorPayload is sent before closing, or as a non-fatal validation error.
+type ErrorPayload struct {
+        Code    string `json:"code"`
+        Message string `json:"message"`
+}
+
+// AuthRequiredPayload tells the client to refresh its HTTP tokens in the
+// background and then send a new WebSocket auth frame before GraceUntil.
+type AuthRequiredPayload struct {
+        ExpiresAt  int64 `json:"expires_at"`
+        GraceUntil int64 `json:"grace_until"`
+}
+
+// AuthContext is the trusted identity attached to a WebSocket after auth.
+//
+// It is mutable only for re-authentication: the player may refresh HTTP tokens
+// while still in the game, then send a new access token on this socket. The mutex
+// prevents races between the read pump updating expiry and the session monitor
+// checking expiry.
+type AuthContext struct {
+        mu              sync.RWMutex
+        UserID          string
+        SessionID       string
+        TokenID         string
+        AccessExpiresAt time.Time
+}
+
+func (a *AuthContext) Snapshot() (userID, sessionID, tokenID string, accessExpiresAt time.Time) <span class="cov8" title="1">{
+        a.mu.RLock()
+        defer a.mu.RUnlock()
+        return a.UserID, a.SessionID, a.TokenID, a.AccessExpiresAt
+}</span>
+
+func (a *AuthContext) AccessExpiresAtValue() time.Time <span class="cov8" title="1">{
+        a.mu.RLock()
+        defer a.mu.RUnlock()
+        return a.AccessExpiresAt
+}</span>
+
+func (a *AuthContext) AccessValidUntil(now time.Time, grace time.Duration) bool <span class="cov8" title="1">{
+        return now.Before(a.AccessExpiresAtValue().Add(grace))
+}</span>
+
+func (a *AuthContext) UpdateFrom(next *AuthContext) <span class="cov8" title="1">{
+        if next == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov8" title="1">a.mu.Lock()
+        defer a.mu.Unlock()
+        a.TokenID = next.TokenID
+        a.AccessExpiresAt = next.AccessExpiresAt</span>
+}
+
+// Client represents a connected WebSocket player connection.
+//
+// All writes to Conn happen only in writePump. All room membership mutations are
+// serialized by Room.Run. This avoids the common WebSocket race bugs: concurrent
+// writes, map races, and room-state mutations from many goroutines.
+type Client struct {
+        ID        string
+        UserID    string
+        SessionID string
+        Username  string
+        RoomID    string
+        Conn      *websocket.Conn
+        Send      chan []byte
+        Done      chan struct{}
+}
+
+// RoomEvent is delivered to an active room's single goroutine inbox.
+//
+// DESIGN DECISION:
+// Passing all events via channels into the room's single goroutine event loop
+// eliminates mutex contention and prevents concurrent map/state mutation bugs on
+// the hot path for drawing/chat/game traffic.
+type RoomEvent struct {
+        Type      EventType
+        Client    *Client
+        Payload   json.RawMessage
+        Seq       int64
+        Timestamp time.Time
+}
+</pre>
+		
+		<pre class="file" id="file51" style="display: none">package realtime
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "net"
+        "net/http"
+        "net/url"
+        "strings"
+        "time"
+
+        "github.com/google/uuid"
+        "github.com/gorilla/websocket"
+
+        "drawo/config"
+        "drawo/internal/core/ports/repositories"
+)
+
+const (
+        authDeadline              = 5 * time.Second
+        joinDeadline              = 10 * time.Second
+        sessionCheckPeriod        = 30 * time.Second
+        clientSendBuffer          = 256
+        maxMessagesPerSecond      = 40
+        maxConsecutiveBadMessages = 3
+)
+
+var (
+        // The server warns the client before the access-token-bound socket auth expires.
+        // Tests may temporarily shorten these package variables.
+        reauthWarningBefore = 1 * time.Minute
+        authGracePeriod     = 2 * time.Minute
+)
+
+type Handler struct {
+        cfg           config.Config
+        hub           *Hub
+        authenticator *Authenticator
+        upgrader      websocket.Upgrader
+}
+
+func NewHandler(cfg config.Config, hub *Hub, sessions repositories.SessionRepository) *Handler <span class="cov8" title="1">{
+        h := &amp;Handler{
+                cfg:           cfg,
+                hub:           hub,
+                authenticator: NewAuthenticator(cfg, sessions),
+        }
+        h.upgrader = websocket.Upgrader{
+                ReadBufferSize:  1024,
+                WriteBufferSize: 1024,
+                CheckOrigin:     h.checkOrigin,
+        }
+        return h
+}</span>
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        conn, err := h.upgrader.Upgrade(w, r, nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">conn.SetReadLimit(maxMessageSize)
+
+        authCtx, err := h.readAuth(r.Context(), conn)
+        if err != nil </span><span class="cov8" title="1">{
+                writeCloseError(conn, "auth_failed", err.Error(), websocket.ClosePolicyViolation)
+                return
+        }</span>
+
+        <span class="cov8" title="1">userID, sessionID, _, accessExpiresAt := authCtx.Snapshot()
+        client := &amp;Client{
+                ID:        uuid.New().String(),
+                UserID:    userID,
+                SessionID: sessionID,
+                Conn:      conn,
+                Send:      make(chan []byte, clientSendBuffer),
+                Done:      make(chan struct{}),
+        }
+
+        if !h.enqueue(client, EventAuthOK, map[string]any{"user_id": userID, "session_id": sessionID, "expires_at": accessExpiresAt.Unix()}) </span><span class="cov0" title="0">{
+                writeCloseError(conn, "send_failed", "client send queue unavailable", websocket.CloseInternalServerErr)
+                return
+        }</span>
+
+        <span class="cov8" title="1">roomID, err := h.readJoin(r.Context(), conn, client)
+        if err != nil </span><span class="cov0" title="0">{
+                writeCloseError(conn, "join_failed", err.Error(), websocket.ClosePolicyViolation)
+                return
+        }</span>
+        <span class="cov8" title="1">if err := h.hub.JoinRoom(r.Context(), roomID, client); err != nil </span><span class="cov8" title="1">{
+                writeCloseError(conn, "join_failed", err.Error(), websocket.ClosePolicyViolation)
+                return
+        }</span>
+
+        <span class="cov8" title="1">go h.writePump(r.Context(), client, authCtx)
+        h.readPump(r.Context(), client, authCtx)</span>
+}
+
+// readAuth requires the first frame to be an auth envelope. This avoids putting
+// access tokens in query strings, where reverse proxies and logs commonly leak
+// them. Browser clients can send this frame immediately after WebSocket open.
+func (h *Handler) readAuth(ctx context.Context, conn *websocket.Conn) (*AuthContext, error) <span class="cov8" title="1">{
+        _ = conn.SetReadDeadline(time.Now().Add(authDeadline))
+        env, err := readEnvelope(conn)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if env.Type != EventAuth </span><span class="cov8" title="1">{
+                return nil, errors.New("first websocket message must be auth")
+        }</span>
+        <span class="cov8" title="1">var payload AuthPayload
+        if err := json.Unmarshal(env.Payload, &amp;payload); err != nil </span><span class="cov0" title="0">{
+                return nil, errors.New("invalid auth payload")
+        }</span>
+        <span class="cov8" title="1">if strings.TrimSpace(payload.AccessToken) == "" </span><span class="cov0" title="0">{
+                return nil, errors.New("access token is required")
+        }</span>
+        <span class="cov8" title="1">return h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)</span>
+}
+
+func (h *Handler) readJoin(ctx context.Context, conn *websocket.Conn, client *Client) (string, error) <span class="cov8" title="1">{
+        _ = conn.SetReadDeadline(time.Now().Add(joinDeadline))
+        env, err := readEnvelope(conn)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", err
+        }</span>
+        <span class="cov8" title="1">if env.Type != EventJoin </span><span class="cov0" title="0">{
+                return "", errors.New("second websocket message must be join")
+        }</span>
+        <span class="cov8" title="1">var payload JoinPayload
+        if err := json.Unmarshal(env.Payload, &amp;payload); err != nil </span><span class="cov0" title="0">{
+                return "", errors.New("invalid join payload")
+        }</span>
+        <span class="cov8" title="1">payload.RoomID = strings.TrimSpace(payload.RoomID)
+        if payload.RoomID == "" || len(payload.RoomID) &gt; 128 </span><span class="cov0" title="0">{
+                return "", errors.New("valid room_id is required")
+        }</span>
+        <span class="cov8" title="1">return payload.RoomID, nil</span>
+}
+
+func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthContext) <span class="cov8" title="1">{
+        defer func() </span><span class="cov8" title="1">{
+                if client.RoomID != "" </span><span class="cov8" title="1">{
+                        h.hub.LeaveRoom(client.RoomID, client)
+                }</span>
+                // Do not close the connection here: LeaveRoom closes client.Send, then
+                // writePump drains any final error/leave messages and closes the socket.
+        }()
+
+        <span class="cov8" title="1">_ = client.Conn.SetReadDeadline(time.Now().Add(pongWait))
+        client.Conn.SetPongHandler(func(string) error </span><span class="cov0" title="0">{
+                return client.Conn.SetReadDeadline(time.Now().Add(pongWait))
+        }</span>)
+
+        <span class="cov8" title="1">windowStart := time.Now()
+        messagesInWindow := 0
+        badMessages := 0
+
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov0" title="0">
+                        return</span>
+                case &lt;-client.Done:<span class="cov0" title="0">
+                        return</span>
+                default:<span class="cov8" title="1"></span>
+                }
+
+                <span class="cov8" title="1">env, err := readEnvelope(client.Conn)
+                if err != nil </span><span class="cov8" title="1">{
+                        return
+                }</span>
+
+                <span class="cov8" title="1">now := time.Now()
+                if now.Sub(windowStart) &gt;= time.Second </span><span class="cov8" title="1">{
+                        windowStart = now
+                        messagesInWindow = 0
+                }</span>
+                <span class="cov8" title="1">messagesInWindow++
+                if messagesInWindow &gt; maxMessagesPerSecond </span><span class="cov8" title="1">{
+                        h.enqueueError(client, "rate_limited", "too many websocket messages")
+                        return
+                }</span>
+
+                <span class="cov8" title="1">if !h.authenticator.SessionActive(ctx, authCtx) </span><span class="cov8" title="1">{
+                        h.enqueueError(client, "session_revoked", "session no longer active")
+                        return
+                }</span>
+
+                <span class="cov8" title="1">if env.Type == EventAuth </span><span class="cov8" title="1">{
+                        if !authCtx.AccessValidUntil(now, authGracePeriod) </span><span class="cov0" title="0">{
+                                h.enqueueError(client, "auth_expired", "websocket access token expired; reconnect with a fresh access token")
+                                return
+                        }</span>
+                        <span class="cov8" title="1">if err := h.reauthenticate(ctx, client, authCtx, env); err != nil </span><span class="cov0" title="0">{
+                                badMessages++
+                                h.enqueueError(client, "auth_failed", err.Error())
+                                if badMessages &gt;= maxConsecutiveBadMessages </span><span class="cov0" title="0">{
+                                        return
+                                }</span>
+                                <span class="cov0" title="0">continue</span>
+                        }
+                        <span class="cov8" title="1">badMessages = 0
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">if !authCtx.AccessValidUntil(now, authGracePeriod) </span><span class="cov8" title="1">{
+                        h.enqueueError(client, "auth_expired", "websocket access token expired; refresh over HTTP and re-authenticate the socket")
+                        return
+                }</span>
+
+                <span class="cov8" title="1">if err := validateClientEvent(env); err != nil </span><span class="cov0" title="0">{
+                        badMessages++
+                        h.enqueueError(client, "bad_message", err.Error())
+                        if badMessages &gt;= maxConsecutiveBadMessages </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                        <span class="cov0" title="0">continue</span>
+                }
+                <span class="cov8" title="1">badMessages = 0
+
+                if env.Type == EventLeave </span><span class="cov0" title="0">{
+                        return
+                }</span>
+
+                <span class="cov8" title="1">if err := h.hub.DispatchToRoom(client.RoomID, &amp;RoomEvent{
+                        Type:      env.Type,
+                        Client:    client,
+                        Payload:   env.Payload,
+                        Seq:       env.Seq,
+                        Timestamp: now,
+                }); err != nil </span><span class="cov0" title="0">{
+                        h.enqueueError(client, "room_error", err.Error())
+                        return
+                }</span>
+        }
+}
+
+func (h *Handler) reauthenticate(ctx context.Context, client *Client, authCtx *AuthContext, env *MessageEnvelope) error <span class="cov8" title="1">{
+        var payload AuthPayload
+        if err := json.Unmarshal(env.Payload, &amp;payload); err != nil </span><span class="cov0" title="0">{
+                return errors.New("invalid auth payload")
+        }</span>
+        <span class="cov8" title="1">if strings.TrimSpace(payload.AccessToken) == "" </span><span class="cov0" title="0">{
+                return errors.New("access token is required")
+        }</span>
+
+        <span class="cov8" title="1">next, err := h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">currentUserID, currentSessionID, _, _ := authCtx.Snapshot()
+        nextUserID, nextSessionID, _, nextExpiry := next.Snapshot()
+        if nextUserID != currentUserID || nextSessionID != currentSessionID </span><span class="cov0" title="0">{
+                return errors.New("re-auth token must belong to the same user and session")
+        }</span>
+
+        <span class="cov8" title="1">authCtx.UpdateFrom(next)
+        returnBool := h.enqueue(client, EventAuthOK, map[string]any{
+                "user_id":    nextUserID,
+                "session_id": nextSessionID,
+                "expires_at": nextExpiry.Unix(),
+        })
+        if !returnBool </span><span class="cov0" title="0">{
+                return errors.New("client send queue unavailable")
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (h *Handler) writePump(ctx context.Context, client *Client, authCtx *AuthContext) <span class="cov8" title="1">{
+        pingTicker := time.NewTicker(pingPeriod)
+        authTicker := time.NewTicker(sessionCheckPeriod)
+        defer func() </span><span class="cov8" title="1">{
+                pingTicker.Stop()
+                authTicker.Stop()
+                _ = client.Conn.Close()
+        }</span>()
+
+        <span class="cov8" title="1">lastAuthRequired := time.Time{}
+
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case &lt;-ctx.Done():<span class="cov8" title="1">
+                        return</span>
+                case message, ok := &lt;-client.Send:<span class="cov8" title="1">
+                        _ = client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+                        if !ok </span><span class="cov8" title="1">{
+                                _ = client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+                                return
+                        }</span>
+                        <span class="cov8" title="1">if err := client.Conn.WriteMessage(websocket.TextMessage, message); err != nil </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                case &lt;-pingTicker.C:<span class="cov0" title="0">
+                        _ = client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+                        if err := client.Conn.WriteMessage(websocket.PingMessage, nil); err != nil </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                case &lt;-authTicker.C:<span class="cov0" title="0">
+                        if !h.writePumpAuthCheck(ctx, client, authCtx, &amp;lastAuthRequired) </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                }
+        }
+}
+
+// writePumpAuthCheck runs inside writePump so auth/session monitoring does not
+// require a third goroutine per socket. This keeps the efficient per-socket model:
+// one readPump goroutine and one writePump goroutine.
+func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCtx *AuthContext, lastAuthRequired *time.Time) bool <span class="cov0" title="0">{
+        now := time.Now()
+        if !h.authenticator.SessionActive(ctx, authCtx) </span><span class="cov0" title="0">{
+                _ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: "session_revoked", Message: "session no longer active"})
+                if client.RoomID != "" </span><span class="cov0" title="0">{
+                        h.hub.LeaveRoom(client.RoomID, client)
+                }</span>
+                <span class="cov0" title="0">return false</span>
+        }
+
+        <span class="cov0" title="0">accessExpiresAt := authCtx.AccessExpiresAtValue()
+        if !authCtx.AccessValidUntil(now, authGracePeriod) </span><span class="cov0" title="0">{
+                _ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: "auth_expired", Message: "websocket access token expired; refresh over HTTP and re-authenticate the socket"})
+                if client.RoomID != "" </span><span class="cov0" title="0">{
+                        h.hub.LeaveRoom(client.RoomID, client)
+                }</span>
+                <span class="cov0" title="0">return false</span>
+        }
+
+        <span class="cov0" title="0">if now.After(accessExpiresAt.Add(-reauthWarningBefore)) &amp;&amp; now.Sub(*lastAuthRequired) &gt;= reauthWarningBefore/2 </span><span class="cov0" title="0">{
+                if err := h.writeEnvelopeNow(client, EventAuthRequired, AuthRequiredPayload{
+                        ExpiresAt:  accessExpiresAt.Unix(),
+                        GraceUntil: accessExpiresAt.Add(authGracePeriod).Unix(),
+                }); err != nil </span><span class="cov0" title="0">{
+                        return false
+                }</span>
+                <span class="cov0" title="0">*lastAuthRequired = now</span>
+        }
+        <span class="cov0" title="0">return true</span>
+}
+
+func (h *Handler) writeEnvelopeNow(client *Client, eventType EventType, payload any) error <span class="cov0" title="0">{
+        payloadJSON, err := json.Marshal(payload)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">data, err := json.Marshal(MessageEnvelope{Type: eventType, Payload: payloadJSON, Timestamp: time.Now().Unix()})
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">_ = client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+        return client.Conn.WriteMessage(websocket.TextMessage, data)</span>
+}
+
+func readEnvelope(conn *websocket.Conn) (*MessageEnvelope, error) <span class="cov8" title="1">{
+        messageType, data, err := conn.ReadMessage()
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if messageType != websocket.TextMessage </span><span class="cov0" title="0">{
+                return nil, errors.New("only text JSON websocket frames are accepted")
+        }</span>
+        <span class="cov8" title="1">var env MessageEnvelope
+        if err := json.Unmarshal(data, &amp;env); err != nil </span><span class="cov0" title="0">{
+                return nil, errors.New("invalid JSON envelope")
+        }</span>
+        <span class="cov8" title="1">if env.Type == "" </span><span class="cov0" title="0">{
+                return nil, errors.New("message type is required")
+        }</span>
+        <span class="cov8" title="1">return &amp;env, nil</span>
+}
+
+func validateClientEvent(env *MessageEnvelope) error <span class="cov8" title="1">{
+        switch env.Type </span>{
+        case EventChat, EventDraw, EventGame, EventClearCanvas:<span class="cov8" title="1">
+                if len(env.Payload) == 0 </span><span class="cov8" title="1">{
+                        return errors.New("payload is required")
+                }</span>
+                <span class="cov8" title="1">if !json.Valid(env.Payload) </span><span class="cov8" title="1">{
+                        return errors.New("payload must be valid JSON")
+                }</span>
+                <span class="cov8" title="1">return nil</span>
+        case EventLeave:<span class="cov8" title="1">
+                return nil</span>
+        case EventAuth, EventJoin:<span class="cov8" title="1">
+                return errors.New("auth/join are only allowed during handshake")</span>
+        default:<span class="cov8" title="1">
+                return errors.New("unsupported websocket event type")</span>
+        }
+}
+
+func (h *Handler) enqueue(client *Client, eventType EventType, payload any) bool <span class="cov8" title="1">{
+        payloadJSON, _ := json.Marshal(payload)
+        data, _ := json.Marshal(MessageEnvelope{Type: eventType, Payload: payloadJSON, Timestamp: time.Now().Unix()})
+        return safeSend(client, data)
+}</span>
+
+func (h *Handler) enqueueError(client *Client, code, message string) bool <span class="cov8" title="1">{
+        return h.enqueue(client, EventError, ErrorPayload{Code: code, Message: message})
+}</span>
+
+func writeCloseError(conn *websocket.Conn, code, message string, closeCode int) <span class="cov8" title="1">{
+        payload, _ := json.Marshal(ErrorPayload{Code: code, Message: message})
+        data, _ := json.Marshal(MessageEnvelope{Type: EventError, Payload: payload, Timestamp: time.Now().Unix()})
+        _ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+        _ = conn.WriteMessage(websocket.TextMessage, data)
+        _ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(closeCode, message), time.Now().Add(writeWait))
+        _ = conn.Close()
+}</span>
+
+func (h *Handler) checkOrigin(r *http.Request) bool <span class="cov8" title="1">{
+        origin := r.Header.Get("Origin")
+        if origin == "" </span><span class="cov8" title="1">{
+                // Non-browser clients (tests, CLI tools, internal services) often omit Origin.
+                // Browsers always send it, so CSRF-style WebSocket abuse is still blocked.
+                return true
+        }</span>
+
+        <span class="cov8" title="1">originURL, err := url.Parse(origin)
+        if err != nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov8" title="1">originHost := originURL.Hostname()
+        requestHost, _, err := net.SplitHostPort(r.Host)
+        if err != nil </span><span class="cov8" title="1">{
+                requestHost = r.Host
+        }</span>
+        <span class="cov8" title="1">if strings.EqualFold(originHost, requestHost) </span><span class="cov8" title="1">{
+                return true
+        }</span>
+
+        <span class="cov8" title="1">if h.cfg.App.Domain != "" </span><span class="cov8" title="1">{
+                appURL, err := url.Parse(h.cfg.App.Domain)
+                if err == nil &amp;&amp; strings.EqualFold(originHost, appURL.Hostname()) </span><span class="cov8" title="1">{
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+</pre>
+		
+		<pre class="file" id="file52" style="display: none">package realtime
 
 import (
         "context"
@@ -4346,22 +5073,56 @@ func NewHub(roomRepo repositories.RoomRepository) *Hub <span class="cov8" title=
 }</span>
 
 func (h *Hub) CreateRoom(ctx context.Context, state *domain.Room) (*Room, error) <span class="cov8" title="1">{
+        if state == nil || state.ID == "" </span><span class="cov8" title="1">{
+                return nil, errors.New("invalid room: ID required")
+        }</span>
+        <span class="cov8" title="1">if err := h.roomRepo.Save(ctx, state); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return h.startRoom(ctx, state), nil</span>
+}
+
+// GetOrStartRoom returns the local room goroutine for this instance, creating it
+// from cached/discovery metadata when necessary. This is the bridge between the
+// distributed room registry (Redis/cache) and the in-process per-room goroutine.
+func (h *Hub) GetOrStartRoom(ctx context.Context, roomID string) (*Room, error) <span class="cov8" title="1">{
+        h.mu.RLock()
+        room, exists := h.rooms[roomID]
+        h.mu.RUnlock()
+        if exists </span><span class="cov8" title="1">{
+                return room, nil
+        }</span>
+
+        <span class="cov8" title="1">state, err := h.roomRepo.GetByID(ctx, roomID)
+        if err != nil || state == nil || state.ID == "" </span><span class="cov8" title="1">{
+                return nil, errors.New("room not found")
+        }</span>
+        <span class="cov8" title="1">return h.startRoom(ctx, state), nil</span>
+}
+
+func (h *Hub) startRoom(ctx context.Context, state *domain.Room) *Room <span class="cov8" title="1">{
         h.mu.Lock()
         defer h.mu.Unlock()
-        if err := h.roomRepo.Save(ctx, state); err != nil </span><span class="cov8" title="1">{ return nil, err }</span>
+        if existing, ok := h.rooms[state.ID]; ok </span><span class="cov0" title="0">{
+                return existing
+        }</span>
         <span class="cov8" title="1">room := NewRoom(state, h.onRoomClosed)
         h.rooms[state.ID] = room
         go room.Run(ctx)
-        return room, nil</span>
+        return room</span>
 }
 
 func (h *Hub) GetRoom(ctx context.Context, roomID string) (*Room, *domain.Room, error) <span class="cov8" title="1">{
         h.mu.RLock()
         room, exists := h.rooms[roomID]
         h.mu.RUnlock()
-        if exists </span><span class="cov8" title="1">{ return room, room.state, nil }</span>
+        if exists </span><span class="cov8" title="1">{
+                return room, room.state, nil
+        }</span>
         <span class="cov8" title="1">state, err := h.roomRepo.GetByID(ctx, roomID)
-        if err != nil || state == nil </span><span class="cov8" title="1">{ return nil, nil, errors.New("room not found") }</span>
+        if err != nil || state == nil </span><span class="cov8" title="1">{
+                return nil, nil, errors.New("room not found")
+        }</span>
         <span class="cov8" title="1">return nil, state, nil</span>
 }
 
@@ -4370,19 +5131,37 @@ func (h *Hub) GetRoomByInviteCode(ctx context.Context, inviteCode string) (*doma
 }</span>
 
 func (h *Hub) JoinRoom(ctx context.Context, roomID string, client *Client) error <span class="cov8" title="1">{
+        room, err := h.GetOrStartRoom(ctx, roomID)
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        <span class="cov8" title="1">client.RoomID = roomID
+        if !room.Dispatch(&amp;RoomEvent{Type: EventJoin, Client: client, Timestamp: time.Now()}) </span><span class="cov0" title="0">{
+                return errors.New("room overloaded")
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (h *Hub) DispatchToRoom(roomID string, event *RoomEvent) error <span class="cov8" title="1">{
         h.mu.RLock()
         room, ok := h.rooms[roomID]
         h.mu.RUnlock()
-        if !ok </span><span class="cov8" title="1">{ return errors.New("room not found") }</span>
-        <span class="cov8" title="1">room.Dispatch(&amp;RoomEvent{Type: EventJoin, Client: client, Timestamp: time.Now()})
-        return nil</span>
+        if !ok </span><span class="cov0" title="0">{
+                return errors.New("room not found")
+        }</span>
+        <span class="cov8" title="1">if !room.Dispatch(event) </span><span class="cov0" title="0">{
+                return errors.New("room overloaded")
+        }</span>
+        <span class="cov8" title="1">return nil</span>
 }
 
 func (h *Hub) LeaveRoom(roomID string, client *Client) <span class="cov8" title="1">{
         h.mu.RLock()
         room, ok := h.rooms[roomID]
         h.mu.RUnlock()
-        if ok </span><span class="cov8" title="1">{ room.Dispatch(&amp;RoomEvent{Type: EventLeave, Client: client, Timestamp: time.Now()}) }</span>
+        if ok </span><span class="cov8" title="1">{
+                room.Dispatch(&amp;RoomEvent{Type: EventLeave, Client: client, Timestamp: time.Now()})
+        }</span>
 }
 
 func (h *Hub) onRoomClosed(roomID, inviteCode string) <span class="cov8" title="1">{
@@ -4395,7 +5174,7 @@ func (h *Hub) onRoomClosed(roomID, inviteCode string) <span class="cov8" title="
 }</span>
 </pre>
 		
-		<pre class="file" id="file49" style="display: none">package websocket
+		<pre class="file" id="file53" style="display: none">package realtime
 
 import (
         "context"
@@ -4409,7 +5188,7 @@ const (
         writeWait      = 10 * time.Second
         pongWait       = 60 * time.Second
         pingPeriod     = (pongWait * 9) / 10
-        maxMessageSize = 1024 * 4
+        maxMessageSize = 64 * 1024 // 64 KiB hard limit to prevent memory abuse.
 )
 
 type Room struct {
@@ -4423,68 +5202,138 @@ func NewRoom(state *domain.Room, onClose func(string, string)) *Room <span class
         return &amp;Room{
                 state:   state,
                 clients: make(map[string]*Client),
-                inbox:   make(chan *RoomEvent, 256),
+                inbox:   make(chan *RoomEvent, 512),
                 onClose: onClose,
         }
 }</span>
 
-func (r *Room) Dispatch(e *RoomEvent) <span class="cov8" title="1">{
-        r.inbox &lt;- e
-}</span>
+// Dispatch queues an event for this room's single goroutine.
+// It is intentionally non-blocking: if a room cannot keep up, callers receive
+// false and may disconnect/back-pressure the client rather than deadlocking the
+// WebSocket read pump.
+func (r *Room) Dispatch(e *RoomEvent) bool <span class="cov8" title="1">{
+        select </span>{
+        case r.inbox &lt;- e:<span class="cov8" title="1">
+                return true</span>
+        default:<span class="cov0" title="0">
+                return false</span>
+        }
+}
 
 func (r *Room) Run(ctx context.Context) <span class="cov8" title="1">{
-        ticker := time.NewTicker(pingPeriod)
         defer func() </span><span class="cov8" title="1">{
-                ticker.Stop()
-                r.onClose(r.state.ID, r.state.InviteCode)
-        }</span>()
+                for _, client := range r.clients </span><span class="cov8" title="1">{
+                        closeClientSend(client)
+                }</span>
+                <span class="cov8" title="1">r.onClose(r.state.ID, r.state.InviteCode)</span>
+        }()
 
         <span class="cov8" title="1">for </span><span class="cov8" title="1">{
                 select </span>{
-                case &lt;-ctx.Done():<span class="cov0" title="0">
+                case &lt;-ctx.Done():<span class="cov8" title="1">
                         return</span>
                 case event := &lt;-r.inbox:<span class="cov8" title="1">
                         if !r.handleEvent(event) </span><span class="cov8" title="1">{
                                 return
                         }</span>
-                case &lt;-ticker.C:<span class="cov0" title="0"></span>
-                        // Ping/Heartbeat logic
                 }
         }
 }
 
 func (r *Room) handleEvent(e *RoomEvent) bool <span class="cov8" title="1">{
-        switch e.Type </span>{
+        if e == nil || e.Client == nil </span><span class="cov0" title="0">{
+                return true
+        }</span>
+
+        <span class="cov8" title="1">switch e.Type </span>{
         case EventJoin:<span class="cov8" title="1">
-                r.clients[e.Client.ID] = e.Client</span>
+                r.clients[e.Client.ID] = e.Client
+                r.sendSystem(e.Client, EventJoined, map[string]string{"room_id": r.state.ID})
+                r.broadcast(e, e.Client.ID)</span>
         case EventLeave:<span class="cov8" title="1">
-                delete(r.clients, e.Client.ID)
-                if len(r.clients) == 0 &amp;&amp; r.state.State == domain.RoomStatePlaying </span><span class="cov8" title="1">{
-                        return false // Signal loop to exit
+                if client, ok := r.clients[e.Client.ID]; ok </span><span class="cov8" title="1">{
+                        delete(r.clients, e.Client.ID)
+                        closeClientSend(client)
                 }</span>
-        case EventDraw:<span class="cov8" title="1">
-                r.broadcast(e)</span>
+                <span class="cov8" title="1">r.broadcast(e, e.Client.ID)
+                if len(r.clients) == 0 &amp;&amp; r.state.State == domain.RoomStatePlaying </span><span class="cov8" title="1">{
+                        return false // Close active ephemeral game rooms once everyone leaves.
+                }</span>
+        case EventChat, EventDraw, EventGame, EventClearCanvas, EventGameState:<span class="cov8" title="1">
+                if _, ok := r.clients[e.Client.ID]; ok </span><span class="cov8" title="1">{
+                        r.broadcast(e, "")
+                }</span>
         }
         <span class="cov8" title="1">return true</span>
 }
 
-func (r *Room) broadcast(e *RoomEvent) <span class="cov8" title="1">{
-        data, _ := json.Marshal(MessageEnvelope{
+func (r *Room) broadcast(e *RoomEvent, excludeClientID string) <span class="cov8" title="1">{
+        data, err := json.Marshal(MessageEnvelope{
                 Type:      e.Type,
                 Payload:   e.Payload,
+                Seq:       e.Seq,
                 Timestamp: e.Timestamp.Unix(),
         })
-        for _, client := range r.clients </span><span class="cov8" title="1">{
-                select </span>{
-                case client.Send &lt;- data:<span class="cov8" title="1"></span>
-                default:<span class="cov0" title="0">
-                        delete(r.clients, client.ID)</span>
+        if err != nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">for _, client := range r.clients </span><span class="cov8" title="1">{
+                if client.ID == excludeClientID </span><span class="cov8" title="1">{
+                        continue</span>
                 }
+                <span class="cov8" title="1">if !safeSend(client, data) </span><span class="cov0" title="0">{
+                        delete(r.clients, client.ID)
+                        closeClientSend(client)
+                }</span>
+        }
+}
+
+func (r *Room) sendSystem(client *Client, eventType EventType, payload any) <span class="cov8" title="1">{
+        payloadJSON, _ := json.Marshal(payload)
+        data, _ := json.Marshal(MessageEnvelope{
+                Type:      eventType,
+                Payload:   payloadJSON,
+                Timestamp: time.Now().Unix(),
+        })
+        if !safeSend(client, data) </span><span class="cov0" title="0">{
+                delete(r.clients, client.ID)
+                closeClientSend(client)
+        }</span>
+}
+
+func safeSend(client *Client, data []byte) bool <span class="cov8" title="1">{
+        select </span>{
+        case client.Send &lt;- data:<span class="cov8" title="1">
+                return true</span>
+        default:<span class="cov8" title="1">
+                return false</span>
+        }
+}
+
+func closeClientSend(client *Client) <span class="cov8" title="1">{
+        if client == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov8" title="1">if client.Done == nil </span><span class="cov8" title="1">{
+                if client.Send != nil </span><span class="cov8" title="1">{
+                        close(client.Send)
+                }</span>
+                <span class="cov8" title="1">return</span>
+        }
+        <span class="cov8" title="1">select </span>{
+        case &lt;-client.Done:<span class="cov8" title="1"></span>
+                // Already closed.
+        default:<span class="cov8" title="1">
+                close(client.Done)
+                if client.Send != nil </span><span class="cov8" title="1">{
+                        close(client.Send)
+                }</span>
         }
 }
 </pre>
 		
-		<pre class="file" id="file50" style="display: none">// Drawo is a multiplayer drawing game server.
+		<pre class="file" id="file54" style="display: none">// Drawo is a multiplayer drawing game server.
 //
 // This is the application entry point. It delegates to the Cobra command tree
 // so the same binary can serve the API, run migrations, or run other admin tasks.
@@ -4499,7 +5348,7 @@ func main() <span class="cov0" title="0">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file51" style="display: none">// Package errors defines application-wide error types and HTTP response helpers.
+		<pre class="file" id="file55" style="display: none">// Package errors defines application-wide error types and HTTP response helpers.
 //
 // Responsibility:
 //   - Provide sentinel errors that business logic can return.
@@ -4606,7 +5455,7 @@ func ValidationError(fieldErrors map[string][]string) (int, gin.H) <span class="
 }</span>
 </pre>
 		
-		<pre class="file" id="file52" style="display: none">// Package i18n provides high-performance internationalization for Drawo.
+		<pre class="file" id="file56" style="display: none">// Package i18n provides high-performance internationalization for Drawo.
 package i18n
 
 import (
@@ -4723,7 +5572,7 @@ func navigateKey(m map[string]interface{}, key string) string <span class="cov8"
 }
 </pre>
 		
-		<pre class="file" id="file53" style="display: none">// Package logger provides structured, request-aware logging.
+		<pre class="file" id="file57" style="display: none">// Package logger provides structured, request-aware logging.
 //
 // Responsibility:
 //   - Initialize a slog.Logger based on configuration.
@@ -4816,7 +5665,7 @@ func ContextWithUserID(ctx context.Context, userID string) context.Context <span
 }</span>
 </pre>
 		
-		<pre class="file" id="file54" style="display: none">// Package security contains security primitives used across the application.
+		<pre class="file" id="file58" style="display: none">// Package security contains security primitives used across the application.
 package security
 
 import (
@@ -4826,11 +5675,19 @@ import (
         "github.com/golang-jwt/jwt/v5"
 )
 
+const (
+        // TokenTypeAccess is accepted by HTTP middleware and WebSocket handshakes.
+        TokenTypeAccess = "access"
+        // TokenTypeRefresh is accepted only by the refresh endpoint.
+        TokenTypeRefresh = "refresh"
+)
+
 // Claims represents the data stored inside our JWT tokens.
 type Claims struct {
-        UserID    string `json:"sub"` // Subject (Standard)
-        SessionID string `json:"sid"` // Drawo specific: Link to Redis session
-        TokenID   string `json:"tid"` // Drawo specific: For rotation detection
+        UserID    string `json:"sub"` // Subject (standard): authenticated user ID.
+        SessionID string `json:"sid"` // Drawo-specific: active Redis/cache session ID.
+        TokenID   string `json:"tid"` // Drawo-specific: refresh rotation identifier.
+        TokenType string `json:"typ"` // "access" or "refresh"; prevents token confusion attacks.
         jwt.RegisteredClaims
 }
 
@@ -4854,14 +5711,16 @@ func NewJWTManager(secret string, issuer string, accessExp, refreshExp time.Dura
 
 // GenerateTokenPair creates both an Access and a Refresh token.
 func (m *JWTManager) GenerateTokenPair(userID, sessionID, tokenID string) (string, string, error) <span class="cov8" title="1">{
-        // 1. Generate Access Token
+        now := time.Now()
+
         accessClaims := &amp;Claims{
                 UserID:    userID,
                 SessionID: sessionID,
                 TokenID:   tokenID,
+                TokenType: TokenTypeAccess,
                 RegisteredClaims: jwt.RegisteredClaims{
-                        ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.accessExpiry)),
-                        IssuedAt:  jwt.NewNumericDate(time.Now()),
+                        ExpiresAt: jwt.NewNumericDate(now.Add(m.accessExpiry)),
+                        IssuedAt:  jwt.NewNumericDate(now),
                         Issuer:    m.issuer,
                 },
         }
@@ -4870,14 +5729,14 @@ func (m *JWTManager) GenerateTokenPair(userID, sessionID, tokenID string) (strin
                 return "", "", fmt.Errorf("sign access token: %w", err)
         }</span>
 
-        // 2. Generate Refresh Token (same IDs, longer expiry)
         <span class="cov8" title="1">refreshClaims := &amp;Claims{
                 UserID:    userID,
                 SessionID: sessionID,
                 TokenID:   tokenID,
+                TokenType: TokenTypeRefresh,
                 RegisteredClaims: jwt.RegisteredClaims{
-                        ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.refreshExpiry)),
-                        IssuedAt:  jwt.NewNumericDate(time.Now()),
+                        ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshExpiry)),
+                        IssuedAt:  jwt.NewNumericDate(now),
                         Issuer:    m.issuer,
                 },
         }
@@ -4889,28 +5748,62 @@ func (m *JWTManager) GenerateTokenPair(userID, sessionID, tokenID string) (strin
         <span class="cov8" title="1">return accessToken, refreshToken, nil</span>
 }
 
-// ParseToken validates the token string and returns the claims.
+// ParseToken validates token signature, expiry, issuer, and returns the claims.
+//
+// SECURITY NOTE:
+// Prefer ParseAccessToken or ParseRefreshToken at call sites. ParseToken is kept
+// for generic tooling/tests, but application boundaries should enforce token type
+// to avoid accepting a long-lived refresh token where a short-lived access token
+// is required.
 func (m *JWTManager) ParseToken(tokenStr string) (*Claims, error) <span class="cov8" title="1">{
         token, err := jwt.ParseWithClaims(tokenStr, &amp;Claims{}, func(t *jwt.Token) (interface{}, error) </span><span class="cov8" title="1">{
                 if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok </span><span class="cov0" title="0">{
                         return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
                 }</span>
                 <span class="cov8" title="1">return m.secretKey, nil</span>
-        })
+        }, jwt.WithIssuer(m.issuer))
 
         <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
                 return nil, err
         }</span>
 
-        <span class="cov8" title="1">if claims, ok := token.Claims.(*Claims); ok &amp;&amp; token.Valid </span><span class="cov8" title="1">{
-                return claims, nil
+        <span class="cov8" title="1">claims, ok := token.Claims.(*Claims)
+        if !ok || !token.Valid </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid token")
+        }</span>
+        <span class="cov8" title="1">if claims.UserID == "" || claims.SessionID == "" || claims.TokenID == "" || claims.TokenType == "" </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("missing required token claims")
         }</span>
 
-        <span class="cov0" title="0">return nil, fmt.Errorf("invalid token")</span>
+        <span class="cov8" title="1">return claims, nil</span>
+}
+
+// ParseAccessToken accepts only short-lived access tokens.
+func (m *JWTManager) ParseAccessToken(tokenStr string) (*Claims, error) <span class="cov8" title="1">{
+        claims, err := m.ParseToken(tokenStr)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if claims.TokenType != TokenTypeAccess </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("unexpected token type: %s", claims.TokenType)
+        }</span>
+        <span class="cov8" title="1">return claims, nil</span>
+}
+
+// ParseRefreshToken accepts only long-lived refresh tokens.
+func (m *JWTManager) ParseRefreshToken(tokenStr string) (*Claims, error) <span class="cov8" title="1">{
+        claims, err := m.ParseToken(tokenStr)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if claims.TokenType != TokenTypeRefresh </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("unexpected token type: %s", claims.TokenType)
+        }</span>
+        <span class="cov8" title="1">return claims, nil</span>
 }
 </pre>
 		
-		<pre class="file" id="file55" style="display: none">// Package security contains security primitives used across the application.
+		<pre class="file" id="file59" style="display: none">// Package security contains security primitives used across the application.
 //
 // Responsibility:
 //   - Password hashing and verification.
@@ -4956,7 +5849,7 @@ func GenerateRandomToken(length int) (string, error) <span class="cov8" title="1
 }
 </pre>
 		
-		<pre class="file" id="file56" style="display: none">// Package validator wraps github.com/go-playground/validator/v10.
+		<pre class="file" id="file60" style="display: none">// Package validator wraps github.com/go-playground/validator/v10.
 //
 // Responsibility:
 //   - Provide a single, reusable validator instance.

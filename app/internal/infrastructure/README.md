@@ -6,8 +6,10 @@ Sub-packages:
 
 - **`database/`** — Relational database connectivity via GORM with factory abstraction supporting drivers like PostgreSQL, MySQL, SQLite, etc.
 - **`cache/`** — Non-relational database / key-value cache layer implementing `ports.CacheRepository` with driver abstraction supporting Redis, in-memory storage, etc.
-- **`websocket/`** — WebSocket hub, room goroutines, and message protocol.
+- **`storage/`** — File/object storage adapters such as local filesystem and MinIO/S3-compatible storage.
 - **`di/`** — Dependency injection container that wires everything together.
+
+Realtime WebSocket runtime code lives in `internal/realtime`, and its delivery adapter lives in `internal/delivery/websocket`. They were intentionally moved out of infrastructure because they represent Drawo's realtime application runtime, not an external infrastructure adapter.
 
 These packages implement the "driven ports" defined in `internal/core/ports`.
 They are allowed to import third-party libraries and framework-specific code.

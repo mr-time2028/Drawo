@@ -1,4 +1,4 @@
-package websocket
+package realtime
 
 import (
 	"context"
@@ -118,14 +118,14 @@ func TestHub_EdgeCases(t *testing.T) {
 	_, _, err = hub.GetRoom(ctx, "ghost")
 	assert.Error(t, err)
 
-    // Test room in cache but NOT in local map (multi-instance simulation)
-    roomInCache := &domain.Room{ID: "remote", Name: "remote"}
-    roomRepo.Save(ctx, roomInCache)
-    
-    h, s, err := hub.GetRoom(ctx, "remote")
-    assert.NoError(t, err)
-    assert.Nil(t, h)
-    assert.Equal(t, "remote", s.ID)
+	// Test room in cache but NOT in local map (multi-instance simulation)
+	roomInCache := &domain.Room{ID: "remote", Name: "remote"}
+	roomRepo.Save(ctx, roomInCache)
+
+	h, s, err := hub.GetRoom(ctx, "remote")
+	assert.NoError(t, err)
+	assert.Nil(t, h)
+	assert.Equal(t, "remote", s.ID)
 
 	// Join non-existent room
 	err = hub.JoinRoom(ctx, "ghost", &Client{})

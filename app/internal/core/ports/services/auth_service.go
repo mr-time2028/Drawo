@@ -179,7 +179,7 @@ func (s *authService) Login(ctx context.Context, username, password, ip, userAge
 // Refresh handles token rotation and detects potential theft/reuse.
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (*domain.TokenPair, error) {
 	// 1. Parse and validate the Refresh Token
-	claims, err := s.jwt.ParseToken(refreshToken)
+	claims, err := s.jwt.ParseRefreshToken(refreshToken)
 	if err != nil {
 		return nil, errors.New(errors.ErrUnauthorized, "invalid or expired refresh token")
 	}
@@ -226,7 +226,7 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*domain
 // Logout terminates the session and revokes all tokens instantly.
 func (s *authService) Logout(ctx context.Context, accessToken string) error {
 	// 1. Parse token (even if expired, we want the SID to clean up Redis)
-	claims, _ := s.jwt.ParseToken(accessToken)
+	claims, _ := s.jwt.ParseAccessToken(accessToken)
 	if claims == nil {
 		return nil // Already invalid
 	}

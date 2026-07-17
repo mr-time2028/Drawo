@@ -11,7 +11,7 @@ import (
 	"drawo/internal/infrastructure/cache"
 	"drawo/internal/infrastructure/database"
 	"drawo/internal/infrastructure/storage"
-	"drawo/internal/infrastructure/websocket"
+	"drawo/internal/realtime"
 	"drawo/pkg/logger"
 )
 
@@ -23,7 +23,7 @@ type Container struct {
 	Sessions repositories.SessionRepository
 	OTPs     repositories.OTPRepository
 	Limiter  services.RateLimiter
-	Hub      *websocket.Hub
+	Hub      *realtime.Hub
 	Services Services
 }
 
@@ -90,13 +90,13 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	rateLimiter := services.NewRateLimiter(cacheClient)
 	otpSvc := services.NewMockOTPService()
 	contentSvc := services.NewContentService(contentRepo, profileRepo, 100)
-	
+
 	authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
-	userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc) 
+	userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc)
 	roomSvc := services.NewRoomService(roomRepo)
 	adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider)
-	
-	hub := websocket.NewHub(roomRepo)
+
+	hub := realtime.NewHub(roomRepo)
 
 	return &Container{
 		Config:   cfg,
@@ -119,7 +119,11 @@ func NewContainer(cfg config.Config) (*Container, error) {
 func (c *Container) Health() map[string]error {
 	ctx := context.Background()
 	res := make(map[string]error)
-	if c.DB != nil { res["database"] = c.DB.Health(ctx) }
-	if c.Cache != nil { res["cache"] = c.Cache.Health(ctx) }
+	if c.DB != nil {
+		res["database"] = c.DB.Health(ctx)
+	}
+	if c.Cache != nil {
+		res["cache"] = c.Cache.Health(ctx)
+	}
 	return res
 }

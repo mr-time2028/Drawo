@@ -37,7 +37,7 @@ func RequireAuth(container *di.Container) gin.HandlerFunc {
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 		// 2. Parse and Validate JWT Signature
-		claims, err := jwt.ParseToken(tokenStr)
+		claims, err := jwt.ParseAccessToken(tokenStr)
 		if err != nil {
 			c.AbortWithStatusJSON(errors.New(errors.ErrUnauthorized, "invalid or expired token").Response())
 			return

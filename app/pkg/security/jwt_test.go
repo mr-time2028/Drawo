@@ -18,10 +18,20 @@ func TestJWTManager(t *testing.T) {
 	assert.NotEmpty(t, ref)
 
 	// 2. Parse Valid
-	claims, err := mgr.ParseToken(acc)
+	claims, err := mgr.ParseAccessToken(acc)
 	require.NoError(t, err)
 	assert.Equal(t, "user-1", claims.UserID)
 	assert.Equal(t, "sess-1", claims.SessionID)
+	assert.Equal(t, TokenTypeAccess, claims.TokenType)
+
+	refreshClaims, err := mgr.ParseRefreshToken(ref)
+	require.NoError(t, err)
+	assert.Equal(t, TokenTypeRefresh, refreshClaims.TokenType)
+
+	_, err = mgr.ParseAccessToken(ref)
+	assert.Error(t, err)
+	_, err = mgr.ParseRefreshToken(acc)
+	assert.Error(t, err)
 
 	// 3. Parse Invalid Format
 	_, err = mgr.ParseToken("invalid.token.here")

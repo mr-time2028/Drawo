@@ -45,7 +45,9 @@ The backend follows **Clean Architecture / Hexagonal Architecture**:
 - `internal/services` — application use cases.
 - `internal/repositories` — GORM persistence.
 - `internal/delivery/http` — Gin controllers, middlewares, routes.
-- `internal/infrastructure` — DB, Redis, WebSocket, DI container.
+- `internal/infrastructure` — DB, Redis/cache, file storage, DI container.
+- `internal/realtime` — WebSocket protocol, secure socket auth/re-auth, hub, and per-room goroutines.
+- `internal/delivery/websocket` — WebSocket delivery adapter and route registration.
 - `pkg` — cross-cutting utilities.
 
 See `docs/01-analysis-and-roadmap.md` for the full development roadmap.
