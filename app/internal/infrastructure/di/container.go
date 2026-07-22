@@ -80,6 +80,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	_ = repositories.NewUserSettingsRepo(dbConn.DB)
 	contentRepo := repositories.NewContentRepo(dbConn.DB)
 	adminRepo := repositories.NewAdminRepo(dbConn.DB)
+	reputationRepo := repositories.NewReputationRepo(dbConn.DB)
 
 	// 2. Initialize specialized cache-based repositories
 	sessionRepo := repositories.NewSessionRepo(cacheClient)
@@ -96,7 +97,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	roomSvc := services.NewRoomService(roomRepo)
 	adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider)
 
-	hub := realtime.NewHub(roomRepo)
+	hub := realtime.NewHubWithDependencies(roomRepo, contentRepo, profileRepo, reputationRepo)
 
 	return &Container{
 		Config:   cfg,

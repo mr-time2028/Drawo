@@ -50,7 +50,7 @@ The backend follows **Clean Architecture / Hexagonal Architecture**:
 - `internal/delivery/websocket` — WebSocket delivery adapter and route registration.
 - `pkg` — cross-cutting utilities.
 
-See `docs/01-analysis-and-roadmap.md` for the full development roadmap.
+See `docs/database-schema.md` for database details and `docs/MIGRATIONS.md` for migration usage.
 
 ## Commands
 

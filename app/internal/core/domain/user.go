@@ -9,9 +9,10 @@ import "time"
 // User is the central account entity.
 //
 // Why separate User from Profile?
-//   Authentication fields rarely change, while profile fields (avatar, settings)
-//   change frequently. Splitting them reduces lock contention and keeps the
-//   auth path lightweight. They share the same ID (1:1 relationship).
+//
+//	Authentication fields rarely change, while profile fields (avatar, settings)
+//	change frequently. Splitting them reduces lock contention and keeps the
+//	auth path lightweight. They share the same ID (1:1 relationship).
 type User struct {
 	ID           string
 	Username     string

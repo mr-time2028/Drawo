@@ -38,7 +38,7 @@ func Register(router *gin.Engine, container *di.Container) {
 	// API v1 group.
 	api := router.Group("/api/v1")
 	{
-		// Auth routes (Phase 4)
+		// Auth routes
 		authCtrl := controllers.NewAuthController(container.Services.Auth)
 		auth := api.Group("/auth")
 		{
@@ -48,7 +48,7 @@ func Register(router *gin.Engine, container *di.Container) {
 			auth.POST("/logout", authCtrl.Logout)
 		}
 
-		// User & Profile routes (Phase 5)
+		// User and profile routes
 		userCtrl := controllers.NewUserController(container.Services.User)
 		user := api.Group("/user")
 		user.Use(middlewares.RequireAuth(container))
@@ -60,7 +60,7 @@ func Register(router *gin.Engine, container *di.Container) {
 			user.POST("/profile/verify/confirm", userCtrl.ConfirmVerification)
 		}
 
-		// Admin routes example (Phase 5/8)
+		// Admin routes
 		adminCtrl := controllers.NewAdminController(container.Services.Admin)
 		admin := api.Group("/admin")
 		admin.Use(middlewares.RequireAuth(container), middlewares.RequireAdmin())

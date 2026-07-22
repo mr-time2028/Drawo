@@ -40,12 +40,11 @@ func (r *contentRepo) InsertWord(ctx context.Context, word *domain.Word) error {
 
 func (r *contentRepo) GetRandomWordGroups(ctx context.Context, categoryID string, lang string, count int) ([]domain.Word, error) {
 	var list []domain.Word
-	// 1. Find random words in the drawer's language
-	err := r.db.WithContext(ctx).
-		Where("category_id = ? AND language = ?", categoryID, lang).
-		Order("RANDOM()").
-		Limit(count).
-		Find(&list).Error
+	query := r.db.WithContext(ctx).Where("language = ?", lang)
+	if categoryID != "" {
+		query = query.Where("category_id = ?", categoryID)
+	}
+	err := query.Order("RANDOM()").Limit(count).Find(&list).Error
 	return list, err
 }
 

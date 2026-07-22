@@ -8,12 +8,12 @@ import (
 )
 
 func TestValidateClientEvent(t *testing.T) {
-	validPayload := json.RawMessage(`{"ok":true}`)
+	validPayload := json.RawMessage(`{"op":"stroke","tool":"pencil","color":"#000000","size":4,"points":[{"x":1,"y":1},{"x":2,"y":2}]}`)
 
-	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventChat, Payload: validPayload}))
+	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventChat, Payload: json.RawMessage(`{"text":"hi"}`)}))
 	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventDraw, Payload: validPayload}))
-	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventGame, Payload: validPayload}))
-	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventClearCanvas, Payload: validPayload}))
+	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventGame, Payload: json.RawMessage(`{"action":"ready"}`)}))
+	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventClearCanvas, Payload: json.RawMessage(`{"ok":true}`)}))
 	assert.NoError(t, validateClientEvent(&MessageEnvelope{Type: EventLeave}))
 
 	assert.Error(t, validateClientEvent(&MessageEnvelope{Type: EventChat}))

@@ -34,6 +34,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&domain.BadWord{},
 		&domain.Song{},
 		&domain.GlobalSetting{},
+		&domain.ReputationEvent{},
 	)
 	require.NoError(t, err)
 	return db
@@ -146,4 +147,6 @@ func TestMiscRepositories(t *testing.T) {
 	NewReportRepo(db).ListReports(ctx, domain.Paging{})
 	NewUserSettingsRepo(db).SaveSettings(ctx, &domain.UserSettings{})
 	NewUserSettingsRepo(db).GetSettings(ctx, "1")
+	NewReputationRepo(db).InsertEvent(ctx, &domain.ReputationEvent{ID: "r1", UserID: "1", Delta: 10, Reason: "test"})
+	NewReputationRepo(db).ListUserEvents(ctx, "1", 10)
 }

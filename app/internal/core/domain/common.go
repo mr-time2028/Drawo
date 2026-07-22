@@ -10,10 +10,10 @@ type Paging struct {
 
 // PageOf wraps a paginated result with total count.
 type PageOf[T any] struct {
-	Items      []T
-	Total      int64
-	Limit      int
-	Offset     int
+	Items  []T
+	Total  int64
+	Limit  int
+	Offset int
 }
 
 // AuditLog records security-relevant actions.

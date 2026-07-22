@@ -14,9 +14,9 @@ const (
 type Song struct {
 	ID        string
 	Title     string
-	FileKey   string   // The object key in MinIO/S3
+	FileKey   string // The object key in MinIO/S3
 	Type      SongType
-	IsActive  bool     // Whether this song should be included in the playlist
+	IsActive  bool // Whether this song should be included in the playlist
 	CreatedAt time.Time
 }
 

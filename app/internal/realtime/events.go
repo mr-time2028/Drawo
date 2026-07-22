@@ -17,18 +17,22 @@ const (
 	EventAuth  EventType = "auth"  // First frame authenticates; later frames re-auth/update access token.
 	EventJoin  EventType = "join"  // Join an ephemeral room after authentication.
 	EventLeave EventType = "leave" // Leave current room gracefully.
-	EventChat  EventType = "chat"  // Chat/guess message. Guess rules arrive in later phases.
+	EventChat  EventType = "chat"  // Chat/guess message. Guess rules are handled by game logic.
 	EventDraw  EventType = "draw"  // Drawing operation payload.
 	EventGame  EventType = "game"  // Generic game-state command/event namespace.
 
 	// Server-to-client protocol events.
-	EventAuthOK       EventType = "auth_ok"
-	EventAuthRequired EventType = "auth_required" // Server asks client to refresh access token in background.
-	EventJoined       EventType = "joined"
-	EventLeft         EventType = "left"
-	EventError        EventType = "error"
-	EventGameState    EventType = "game_state"
-	EventClearCanvas  EventType = "clear_canvas"
+	EventAuthOK            EventType = "auth_ok"
+	EventAuthRequired      EventType = "auth_required" // Server asks client to refresh access token in background.
+	EventCanvasSync        EventType = "canvas_sync"   // Server sends current round drawing history to a joiner.
+	EventJoined            EventType = "joined"
+	EventLeft              EventType = "left"
+	EventPlayerJoined      EventType = "player_joined"
+	EventPlayerLeft        EventType = "player_left"
+	EventPlayerReconnected EventType = "player_reconnected"
+	EventError             EventType = "error"
+	EventGameState         EventType = "game_state"
+	EventClearCanvas       EventType = "clear_canvas"
 )
 
 // MessageEnvelope is the standard JSON frame sent in both directions.
@@ -54,9 +58,18 @@ type AuthPayload struct {
 	AccessToken string `json:"access_token"`
 }
 
-// JoinPayload identifies the room to join after authentication.
+// JoinPayload asks the backend to place this socket into a room.
+//
+// Public matchmaking is backend-owned: clients normally send an empty payload or
+// {"mode":"public","language":"en"}, and the Hub chooses/creates the room.
+// room_id is optional and exists for reconnect/admin/debug flows. Private joins
+// should use invite_code instead of exposing internal room IDs to the frontend.
 type JoinPayload struct {
-	RoomID string `json:"room_id"`
+	Mode       string `json:"mode,omitempty"`        // "public" (default) or "private".
+	Language   string `json:"language,omitempty"`    // Matchmaking language, e.g. "en" or "fa".
+	CategoryID string `json:"category_id,omitempty"` // Optional dictionary category preference.
+	RoomID     string `json:"room_id,omitempty"`     // Optional direct join/reconnect/debug path.
+	InviteCode string `json:"invite_code,omitempty"` // Private room lookup path.
 }
 
 // ErrorPayload is sent before closing, or as a non-fatal validation error.
@@ -66,10 +79,9 @@ type ErrorPayload struct {
 }
 
 // AuthRequiredPayload tells the client to refresh its HTTP tokens in the
-// background and then send a new WebSocket auth frame before GraceUntil.
+// background and then send a new WebSocket auth frame before ExpiresAt.
 type AuthRequiredPayload struct {
-	ExpiresAt  int64 `json:"expires_at"`
-	GraceUntil int64 `json:"grace_until"`
+	ExpiresAt int64 `json:"expires_at"`
 }
 
 // AuthContext is the trusted identity attached to a WebSocket after auth.
@@ -98,8 +110,8 @@ func (a *AuthContext) AccessExpiresAtValue() time.Time {
 	return a.AccessExpiresAt
 }
 
-func (a *AuthContext) AccessValidUntil(now time.Time, grace time.Duration) bool {
-	return now.Before(a.AccessExpiresAtValue().Add(grace))
+func (a *AuthContext) AccessValid(now time.Time) bool {
+	return now.Before(a.AccessExpiresAtValue())
 }
 
 func (a *AuthContext) UpdateFrom(next *AuthContext) {

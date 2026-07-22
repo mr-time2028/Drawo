@@ -100,7 +100,7 @@ func (s *authService) Register(ctx context.Context, username, password string) (
 	}
 
 	if err := s.profileRepo.Insert(profile); err != nil {
-		// Note: In production we'd use a transaction, but for Phase 4 we use granular repos.
+		// Note: In production this should use a transaction; for now we use granular repositories.
 		return nil, errors.New(errors.ErrInternalServer, "account created but profile failed")
 	}
 

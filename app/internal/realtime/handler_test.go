@@ -111,6 +111,55 @@ func readEnvelopeWithDeadline(t *testing.T, conn *websocket.Conn) MessageEnvelop
 	return env
 }
 
+func readUntilType(t *testing.T, conn *websocket.Conn, eventType EventType) MessageEnvelope {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		require.NoError(t, conn.SetReadDeadline(deadline))
+		var env MessageEnvelope
+		require.NoError(t, conn.ReadJSON(&env))
+		if env.Type == eventType {
+			return env
+		}
+	}
+	t.Fatalf("timed out waiting for event type %s", eventType)
+	return MessageEnvelope{}
+}
+
+func forceRoomDrawing(t *testing.T, e *wsTestEnv, roomID string, drawerID string) {
+	t.Helper()
+	room, _, err := e.hub.GetRoom(context.Background(), roomID)
+	require.NoError(t, err)
+	require.NotNil(t, room)
+	room.gameState = GameStateDrawing
+	room.state.CurrentDrawerID = drawerID
+	room.roundEndsAt = time.Now().Add(time.Minute)
+}
+
+func forceAllRoomsDrawing(t *testing.T, e *wsTestEnv, drawerID string) {
+	t.Helper()
+	e.hub.mu.RLock()
+	defer e.hub.mu.RUnlock()
+	for _, room := range e.hub.rooms {
+		room.gameState = GameStateDrawing
+		room.state.CurrentDrawerID = drawerID
+		room.roundEndsAt = time.Now().Add(time.Minute)
+	}
+}
+
+func validStrokePayload() map[string]any {
+	return map[string]any{
+		"op":    DrawOpStroke,
+		"tool":  ToolPencil,
+		"color": "#000000",
+		"size":  4,
+		"points": []map[string]float64{
+			{"x": 10, "y": 20},
+			{"x": 12, "y": 22},
+		},
+	}
+}
+
 func connectAuthenticated(t *testing.T, e *wsTestEnv, token, roomID string) *websocket.Conn {
 	t.Helper()
 	conn := e.dial(t)
@@ -118,10 +167,14 @@ func connectAuthenticated(t *testing.T, e *wsTestEnv, token, roomID string) *web
 	writeEnvelope(t, conn, EventJoin, JoinPayload{RoomID: roomID})
 
 	first := readEnvelopeWithDeadline(t, conn)
-	second := readEnvelopeWithDeadline(t, conn)
 	assert.Equal(t, EventAuthOK, first.Type)
-	assert.Equal(t, EventJoined, second.Type)
-	return conn
+	for {
+		next := readEnvelopeWithDeadline(t, conn)
+		if next.Type == EventJoined {
+			return conn
+		}
+		assert.Contains(t, []EventType{EventCanvasSync, EventGameState}, next.Type)
+	}
 }
 
 func TestWebSocketHandler_AuthenticatedJoinAndBroadcast(t *testing.T) {
@@ -133,14 +186,13 @@ func TestWebSocketHandler_AuthenticatedJoinAndBroadcast(t *testing.T) {
 	conn1 := connectAuthenticated(t, env, access1, "room-1")
 	conn2 := connectAuthenticated(t, env, access2, "room-1")
 
-	// Client 1 receives client 2's join broadcast; drain it before draw assertion.
-	_ = readEnvelopeWithDeadline(t, conn1)
+	forceRoomDrawing(t, env, "room-1", "user-1")
 
-	writeEnvelope(t, conn1, EventDraw, map[string]any{"stroke": []int{10, 20}})
+	writeEnvelope(t, conn1, EventDraw, validStrokePayload())
 
-	msg := readEnvelopeWithDeadline(t, conn2)
+	msg := readUntilType(t, conn2, EventDraw)
 	assert.Equal(t, EventDraw, msg.Type)
-	assert.JSONEq(t, `{"stroke":[10,20]}`, string(msg.Payload))
+	assert.Contains(t, string(msg.Payload), `"op":"stroke"`)
 }
 
 func TestWebSocketHandler_RejectsRefreshTokenAsAuth(t *testing.T) {
@@ -151,7 +203,7 @@ func TestWebSocketHandler_RejectsRefreshTokenAsAuth(t *testing.T) {
 	conn := env.dial(t)
 	writeEnvelope(t, conn, EventAuth, AuthPayload{AccessToken: refresh})
 
-	msg := readEnvelopeWithDeadline(t, conn)
+	msg := readUntilType(t, conn, EventError)
 	assert.Equal(t, EventError, msg.Type)
 	assert.Contains(t, string(msg.Payload), "auth_failed")
 }
@@ -163,7 +215,7 @@ func TestWebSocketHandler_RejectsMessagesBeforeAuth(t *testing.T) {
 	conn := env.dial(t)
 	writeEnvelope(t, conn, EventJoin, JoinPayload{RoomID: "room-1"})
 
-	msg := readEnvelopeWithDeadline(t, conn)
+	msg := readUntilType(t, conn, EventError)
 	assert.Equal(t, EventError, msg.Type)
 	assert.Contains(t, string(msg.Payload), "first websocket message must be auth")
 }
@@ -176,7 +228,7 @@ func TestWebSocketHandler_RejectsMissingRoom(t *testing.T) {
 	writeEnvelope(t, conn, EventAuth, AuthPayload{AccessToken: access})
 	writeEnvelope(t, conn, EventJoin, JoinPayload{RoomID: "missing-room"})
 
-	msg := readEnvelopeWithDeadline(t, conn)
+	msg := readUntilType(t, conn, EventError)
 	assert.Equal(t, EventError, msg.Type)
 	assert.Contains(t, string(msg.Payload), "room not found")
 }
@@ -190,7 +242,7 @@ func TestWebSocketHandler_ClosesWhenSessionRevoked(t *testing.T) {
 	require.NoError(t, env.sessions.Delete(context.Background(), "sess-1"))
 	writeEnvelope(t, conn, EventChat, map[string]string{"text": "hello"})
 
-	msg := readEnvelopeWithDeadline(t, conn)
+	msg := readUntilType(t, conn, EventError)
 	assert.Equal(t, EventError, msg.Type)
 	assert.Contains(t, string(msg.Payload), "session_revoked")
 }
@@ -262,11 +314,7 @@ func newWSTestEnvWithAccessExpiry(t *testing.T, accessExpiry time.Duration) *wsT
 	}
 }
 
-func TestWebSocketHandler_RequiresReauthAfterAccessTokenExpiry(t *testing.T) {
-	oldGrace := authGracePeriod
-	authGracePeriod = 100 * time.Millisecond
-	t.Cleanup(func() { authGracePeriod = oldGrace })
-
+func TestWebSocketHandler_ClosesAfterAccessTokenExpiry(t *testing.T) {
 	env := newWSTestEnvWithAccessExpiry(t, time.Second)
 	env.createRoom(t, "room-1")
 	access, _ := env.createSession(t, "user-1", "sess-1", "tok-1")
@@ -275,28 +323,24 @@ func TestWebSocketHandler_RequiresReauthAfterAccessTokenExpiry(t *testing.T) {
 	time.Sleep(1200 * time.Millisecond)
 	writeEnvelope(t, conn, EventChat, map[string]string{"text": "after expiry"})
 
-	msg := readEnvelopeWithDeadline(t, conn)
+	msg := readUntilType(t, conn, EventError)
 	assert.Equal(t, EventError, msg.Type)
 	assert.Contains(t, string(msg.Payload), "auth_expired")
 }
 
 func TestWebSocketHandler_ReauthKeepsSocketAliveWithNewAccessToken(t *testing.T) {
-	oldGrace := authGracePeriod
-	authGracePeriod = time.Second
-	t.Cleanup(func() { authGracePeriod = oldGrace })
-
-	env := newWSTestEnvWithAccessExpiry(t, time.Second)
+	env := newWSTestEnvWithAccessExpiry(t, 2*time.Second)
 	env.createRoom(t, "room-1")
 	access1, _ := env.createSession(t, "user-1", "sess-1", "tok-1")
 	accessReceiver, _ := env.createSession(t, "user-2", "sess-2", "tok-2")
 
 	conn1 := connectAuthenticated(t, env, access1, "room-1")
 	conn2 := connectAuthenticated(t, env, accessReceiver, "room-1")
-	_ = readEnvelopeWithDeadline(t, conn1) // drain receiver join broadcast
+	forceRoomDrawing(t, env, "room-1", "user-1")
 
 	// Simulate HTTP refresh in the background: refresh rotation changes the token
 	// ID in session storage, and the client gets a new short-lived access token.
-	time.Sleep(700 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	longerLivedJWT := security.NewJWTManager(env.cfg.App.SecretKey, env.cfg.Auth.Issuer, 5*time.Second, env.cfg.Auth.RefreshTokenExpiry)
 	access2, _, err := longerLivedJWT.GenerateTokenPair("user-1", "sess-1", "tok-rotated")
 	require.NoError(t, err)
@@ -309,14 +353,30 @@ func TestWebSocketHandler_ReauthKeepsSocketAliveWithNewAccessToken(t *testing.T)
 	}))
 
 	writeEnvelope(t, conn1, EventAuth, AuthPayload{AccessToken: access2})
-	reauthOK := readEnvelopeWithDeadline(t, conn1)
+	reauthOK := readUntilType(t, conn1, EventAuthOK)
 	assert.Equal(t, EventAuthOK, reauthOK.Type)
 
 	// If re-auth did not update the socket auth context, this message would be
-	// rejected because access1 is past expiry+grace.
-	time.Sleep(500 * time.Millisecond)
-	writeEnvelope(t, conn1, EventDraw, map[string]int{"x": 1})
+	// rejected because access1 is past expiry.
+	time.Sleep(1700 * time.Millisecond)
+	writeEnvelope(t, conn1, EventDraw, validStrokePayload())
 
-	msg := readEnvelopeWithDeadline(t, conn2)
+	msg := readUntilType(t, conn2, EventDraw)
+	assert.Equal(t, EventDraw, msg.Type)
+}
+
+func TestWebSocketHandler_BackendPublicMatchmakingWithoutRoomID(t *testing.T) {
+	env := newWSTestEnv(t)
+	access1, _ := env.createSession(t, "user-1", "sess-1", "tok-1")
+	access2, _ := env.createSession(t, "user-2", "sess-2", "tok-2")
+
+	// The frontend does not know a room_id. It only asks for public matchmaking.
+	conn1 := connectAuthenticated(t, env, access1, "")
+	conn2 := connectAuthenticated(t, env, access2, "")
+
+	forceAllRoomsDrawing(t, env, "user-1")
+
+	writeEnvelope(t, conn1, EventDraw, validStrokePayload())
+	msg := readUntilType(t, conn2, EventDraw)
 	assert.Equal(t, EventDraw, msg.Type)
 }

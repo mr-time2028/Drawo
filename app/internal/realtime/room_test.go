@@ -16,6 +16,10 @@ import (
 )
 
 func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
+	oldReconnectGrace := reconnectGrace
+	reconnectGrace = 50 * time.Millisecond
+	t.Cleanup(func() { reconnectGrace = oldReconnectGrace })
+
 	cacheClient, err := cache.NewClient(config.CacheConfig{Driver: "memory"})
 	require.NoError(t, err)
 	defer cacheClient.Close()
@@ -69,11 +73,13 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 		<-client2.Send
 	}
 
+	room.gameState = GameStateDrawing
+
 	// Client 1 sends a draw stroke event
 	drawEvent := &RoomEvent{
 		Type:      EventDraw,
 		Client:    client1,
-		Payload:   []byte(`{"stroke": [10, 20]}`),
+		Payload:   []byte(`{"op":"stroke","tool":"pencil","color":"#000000","size":4,"points":[{"x":10,"y":20},{"x":12,"y":22}]}`),
 		Timestamp: time.Now(),
 	}
 	room.Dispatch(drawEvent)
@@ -93,7 +99,7 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 
 	// Client 2 leaves
 	hub.LeaveRoom("room-ephemeral-1", client2)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	// Verify room is removed from local hub map
 	_, _, err = hub.GetRoom(ctx, "room-ephemeral-1")

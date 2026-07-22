@@ -53,9 +53,9 @@ func (r *sessionRepo) Set(ctx context.Context, session *domain.Session) error {
 	// We look at our "Pointer" to see if this user already has an active Session ID.
 	pointerKey := activeSessionPrefix + session.UserID
 	oldSessionID, err := r.cache.Get(ctx, pointerKey)
-	
+
 	if err == nil && oldSessionID != "" {
-		// An old session exists! 
+		// An old session exists!
 		// We delete its details so the old JWT becomes useless.
 		_ = r.cache.Delete(ctx, sessionKeyPrefix+oldSessionID)
 	}

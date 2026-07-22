@@ -29,8 +29,7 @@ const (
 var (
 	// The server warns the client before the access-token-bound socket auth expires.
 	// Tests may temporarily shorten these package variables.
-	reauthWarningBefore = 1 * time.Minute
-	authGracePeriod     = 2 * time.Minute
+	reauthWarningBefore = 2 * time.Minute
 )
 
 type Handler struct {
@@ -83,12 +82,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roomID, err := h.readJoin(r.Context(), conn, client)
+	joinPayload, err := h.readJoin(r.Context(), conn, client)
 	if err != nil {
 		writeCloseError(conn, "join_failed", err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
-	if err := h.hub.JoinRoom(r.Context(), roomID, client); err != nil {
+	if _, err := h.hub.JoinByRequest(r.Context(), joinPayload, client); err != nil {
 		writeCloseError(conn, "join_failed", err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
@@ -119,24 +118,35 @@ func (h *Handler) readAuth(ctx context.Context, conn *websocket.Conn) (*AuthCont
 	return h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)
 }
 
-func (h *Handler) readJoin(ctx context.Context, conn *websocket.Conn, client *Client) (string, error) {
+func (h *Handler) readJoin(ctx context.Context, conn *websocket.Conn, client *Client) (JoinPayload, error) {
 	_ = conn.SetReadDeadline(time.Now().Add(joinDeadline))
 	env, err := readEnvelope(conn)
 	if err != nil {
-		return "", err
+		return JoinPayload{}, err
 	}
 	if env.Type != EventJoin {
-		return "", errors.New("second websocket message must be join")
+		return JoinPayload{}, errors.New("second websocket message must be join")
+	}
+	if len(env.Payload) == 0 {
+		// Empty join means: backend, please public-matchmake me.
+		return JoinPayload{Mode: "public"}, nil
 	}
 	var payload JoinPayload
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
-		return "", errors.New("invalid join payload")
+		return JoinPayload{}, errors.New("invalid join payload")
 	}
 	payload.RoomID = strings.TrimSpace(payload.RoomID)
-	if payload.RoomID == "" || len(payload.RoomID) > 128 {
-		return "", errors.New("valid room_id is required")
+	payload.InviteCode = strings.TrimSpace(payload.InviteCode)
+	payload.Mode = strings.ToLower(strings.TrimSpace(payload.Mode))
+	payload.Language = strings.ToLower(strings.TrimSpace(payload.Language))
+	payload.CategoryID = strings.TrimSpace(payload.CategoryID)
+	if len(payload.RoomID) > 128 || len(payload.InviteCode) > 64 || len(payload.Language) > 8 || len(payload.CategoryID) > 128 {
+		return JoinPayload{}, errors.New("invalid join payload")
 	}
-	return payload.RoomID, nil
+	if payload.Mode != "" && payload.Mode != "public" && payload.Mode != "private" && payload.Mode != "reconnect" {
+		return JoinPayload{}, errors.New("invalid join mode")
+	}
+	return payload, nil
 }
 
 func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthContext) {
@@ -188,7 +198,7 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 		}
 
 		if env.Type == EventAuth {
-			if !authCtx.AccessValidUntil(now, authGracePeriod) {
+			if !authCtx.AccessValid(now) {
 				h.enqueueError(client, "auth_expired", "websocket access token expired; reconnect with a fresh access token")
 				return
 			}
@@ -204,8 +214,8 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 			continue
 		}
 
-		if !authCtx.AccessValidUntil(now, authGracePeriod) {
-			h.enqueueError(client, "auth_expired", "websocket access token expired; refresh over HTTP and re-authenticate the socket")
+		if !authCtx.AccessValid(now) {
+			h.enqueueError(client, "auth_expired", "websocket access token expired; reconnect with a fresh access token")
 			return
 		}
 
@@ -318,8 +328,8 @@ func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCt
 	}
 
 	accessExpiresAt := authCtx.AccessExpiresAtValue()
-	if !authCtx.AccessValidUntil(now, authGracePeriod) {
-		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: "auth_expired", Message: "websocket access token expired; refresh over HTTP and re-authenticate the socket"})
+	if !authCtx.AccessValid(now) {
+		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: "auth_expired", Message: "websocket access token expired; reconnect with a fresh access token"})
 		if client.RoomID != "" {
 			h.hub.LeaveRoom(client.RoomID, client)
 		}
@@ -328,8 +338,7 @@ func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCt
 
 	if now.After(accessExpiresAt.Add(-reauthWarningBefore)) && now.Sub(*lastAuthRequired) >= reauthWarningBefore/2 {
 		if err := h.writeEnvelopeNow(client, EventAuthRequired, AuthRequiredPayload{
-			ExpiresAt:  accessExpiresAt.Unix(),
-			GraceUntil: accessExpiresAt.Add(authGracePeriod).Unix(),
+			ExpiresAt: accessExpiresAt.Unix(),
 		}); err != nil {
 			return false
 		}
@@ -371,7 +380,10 @@ func readEnvelope(conn *websocket.Conn) (*MessageEnvelope, error) {
 
 func validateClientEvent(env *MessageEnvelope) error {
 	switch env.Type {
-	case EventChat, EventDraw, EventGame, EventClearCanvas:
+	case EventDraw:
+		_, err := ValidateDrawingPayload(env.Payload)
+		return err
+	case EventChat, EventGame, EventClearCanvas:
 		if len(env.Payload) == 0 {
 			return errors.New("payload is required")
 		}
