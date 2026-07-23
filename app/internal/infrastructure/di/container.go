@@ -74,7 +74,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	_ = repositories.NewFriendshipRepo(dbConn.DB)
 	_ = repositories.NewFriendRequestRepo(dbConn.DB)
 	_ = repositories.NewGameHistoryRepo(dbConn.DB)
-	_ = repositories.NewReportRepo(dbConn.DB)
+	reportRepo := repositories.NewReportRepo(dbConn.DB)
 	_ = repositories.NewAchievementRepo(dbConn.DB)
 	_ = repositories.NewPlayerStatisticRepo(dbConn.DB)
 	_ = repositories.NewUserSettingsRepo(dbConn.DB)
@@ -95,7 +95,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
 	userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc)
 	roomSvc := services.NewRoomService(roomRepo)
-	adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider, contentRepo)
+	adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider, contentRepo, reportRepo, reputationRepo)
 
 	hub := realtime.NewHubWithDependencies(roomRepo, contentRepo, profileRepo, reputationRepo)
 

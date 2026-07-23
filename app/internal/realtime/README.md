@@ -524,3 +524,56 @@ abandoned_active_game
 ```
 
 This makes reputation changes explainable for moderation/admin tooling.
+
+## Player reports and moderation evidence
+
+Players can report bad behavior during a game using the `game` event namespace:
+
+```json
+{
+  "type": "game",
+  "payload": {
+    "event": "report",
+    "reported_user_id": "target-user-id",
+    "reason": "cheating",
+    "details": "drawer wrote the answer"
+  }
+}
+```
+
+Supported reasons:
+
+```text
+cheating
+griefing
+inappropriate_drawing
+abusive_chat
+```
+
+The room validates that:
+
+- reporter is in the room;
+- reported user is in the room;
+- reporter is not reporting themselves;
+- reason is supported;
+- duplicate reports from the same reporter for the same target/reason/round are rejected;
+- details are limited in length.
+
+When a report is accepted, the room stores an evidence snapshot containing:
+
+- room id;
+- round number;
+- current game state;
+- reporter and reported user ids;
+- current drawer id;
+- current word group/text for admin review;
+- recent canvas operations;
+- recent chat history;
+- timestamp.
+
+Evidence is stored as JSON on the report record so admins can review cheating,
+offensive drawings, abusive chat, or griefing with context.
+
+Multiple unique reports against the same user in the same round create small
+reputation penalties before admin review. Admin confirmation can later apply a
+larger penalty through the report review endpoints.

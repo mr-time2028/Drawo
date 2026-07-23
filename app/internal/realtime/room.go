@@ -24,8 +24,11 @@ type Room struct {
 	inbox   chan *RoomEvent
 	onClose func(roomID, inviteCode string)
 
-	contentRepo repositories.ContentRepository
-	reputation  *reputationLedger
+	contentRepo  repositories.ContentRepository
+	reputation   *reputationLedger
+	reportRepo   repositories.ReportRepository
+	reportKeys   map[string]struct{}
+	roundReports map[string]map[string]struct{}
 
 	gameState            string
 	players              map[string]*PlayerState
@@ -55,21 +58,24 @@ type Room struct {
 	chatHistory []ChatPayload
 }
 
-func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository) *Room {
+func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, reportRepo repositories.ReportRepository) *Room {
 	return &Room{
-		state:       state,
-		clients:     make(map[string]*Client),
-		inbox:       make(chan *RoomEvent, 512),
-		onClose:     onClose,
-		contentRepo: contentRepo,
-		reputation:  newReputationLedger(profileRepo, reputationRepo, state.ID),
-		gameState:   GameStateWaitingForPlayers,
-		players:     make(map[string]*PlayerState),
-		canvasOps:   make([]DrawOperation, 0, 256),
-		redoOps:     make(map[string][]DrawOperation),
-		drawLimits:  make(map[string]*drawLimitState),
-		chatLimits:  make(map[string]*chatLimitState),
-		chatHistory: make([]ChatPayload, 0, 100),
+		state:        state,
+		clients:      make(map[string]*Client),
+		inbox:        make(chan *RoomEvent, 512),
+		onClose:      onClose,
+		contentRepo:  contentRepo,
+		reputation:   newReputationLedger(profileRepo, reputationRepo, state.ID),
+		reportRepo:   reportRepo,
+		reportKeys:   make(map[string]struct{}),
+		roundReports: make(map[string]map[string]struct{}),
+		gameState:    GameStateWaitingForPlayers,
+		players:      make(map[string]*PlayerState),
+		canvasOps:    make([]DrawOperation, 0, 256),
+		redoOps:      make(map[string][]DrawOperation),
+		drawLimits:   make(map[string]*drawLimitState),
+		chatLimits:   make(map[string]*chatLimitState),
+		chatHistory:  make([]ChatPayload, 0, 100),
 	}
 }
 
@@ -544,20 +550,35 @@ func (r *Room) recordChat(payload ChatPayload) {
 }
 
 func (r *Room) handleGameEvent(e *RoomEvent) {
-	var payload ChooseWordPayload
-	if err := json.Unmarshal(e.Payload, &payload); err != nil {
+	var base struct {
+		Event string `json:"event"`
+	}
+	if err := json.Unmarshal(e.Payload, &base); err != nil {
 		r.sendError(e.Client, "invalid_game_event", "invalid game event")
 		return
 	}
-	if payload.Event != "choose_word" {
+	switch base.Event {
+	case "choose_word":
+		var payload ChooseWordPayload
+		if err := json.Unmarshal(e.Payload, &payload); err != nil {
+			r.sendError(e.Client, "invalid_game_event", "invalid word choice")
+			return
+		}
+		if r.gameState != GameStateWordSelection || e.Client.UserID != r.state.CurrentDrawerID {
+			r.sendError(e.Client, "word_choice_forbidden", "only the current drawer can choose a word")
+			return
+		}
+		r.chooseWord(payload.GroupID)
+	case "report":
+		var payload ReportPayload
+		if err := json.Unmarshal(e.Payload, &payload); err != nil {
+			r.sendError(e.Client, "invalid_report", "invalid report payload")
+			return
+		}
+		r.handleReportEvent(e.Client, payload)
+	default:
 		r.sendError(e.Client, "unsupported_game_event", "unsupported game event")
-		return
 	}
-	if r.gameState != GameStateWordSelection || e.Client.UserID != r.state.CurrentDrawerID {
-		r.sendError(e.Client, "word_choice_forbidden", "only the current drawer can choose a word")
-		return
-	}
-	r.chooseWord(payload.GroupID)
 }
 
 func (r *Room) startCountdown() {

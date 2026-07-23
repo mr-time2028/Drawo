@@ -47,6 +47,28 @@ func (m *mockAdminSvc) BanUser(ctx context.Context, id string) error {
 func (m *mockAdminSvc) UnbanUser(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)
 }
+
+func (m *mockAdminSvc) ListReports(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error) {
+	args := m.Called(ctx, status, paging)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.PageOf[domain.Report]), args.Error(1)
+}
+func (m *mockAdminSvc) GetReport(ctx context.Context, id string) (*domain.Report, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Report), args.Error(1)
+}
+func (m *mockAdminSvc) ConfirmReport(ctx context.Context, id, adminID, note string) error {
+	return m.Called(ctx, id, adminID, note).Error(0)
+}
+func (m *mockAdminSvc) RejectReport(ctx context.Context, id, adminID, note string) error {
+	return m.Called(ctx, id, adminID, note).Error(0)
+}
+
 func (m *mockAdminSvc) UpdateGlobalSetting(ctx context.Context, k, v string) error {
 	return m.Called(ctx, k, v).Error(0)
 }
@@ -146,6 +168,42 @@ func TestAdminControllerBadWords(t *testing.T) {
 	svc.On("DeleteBadWord", mock.Anything, "b1").Return(nil).Once()
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("DELETE", "/bad-words/b1", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAdminControllerReports(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := new(mockAdminSvc)
+	ctrl := NewAdminController(svc)
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("userID", "admin1"); c.Next() })
+	router.GET("/reports", ctrl.ListReports)
+	router.GET("/reports/:id", ctrl.GetReport)
+	router.POST("/reports/:id/confirm", ctrl.ConfirmReport)
+	router.POST("/reports/:id/reject", ctrl.RejectReport)
+
+	svc.On("ListReports", mock.Anything, domain.ReportStatusPending, mock.Anything).Return(&domain.PageOf[domain.Report]{Items: []domain.Report{}}, nil).Once()
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/reports?status=pending", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	svc.On("GetReport", mock.Anything, "r1").Return(&domain.Report{ID: "r1"}, nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/reports/r1", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	svc.On("ConfirmReport", mock.Anything, "r1", "admin1", "ok").Return(nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("POST", "/reports/r1/confirm", bytes.NewBufferString(`{"note":"ok"}`))
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	svc.On("RejectReport", mock.Anything, "r1", "admin1", "no").Return(nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("POST", "/reports/r1/reject", bytes.NewBufferString(`{"note":"no"}`))
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 }

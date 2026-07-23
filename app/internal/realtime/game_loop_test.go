@@ -41,7 +41,7 @@ func (r *fakeProfileRepo) Update(profile *domain.Profile) error {
 
 func newGameTestRoom(profileRepo *fakeProfileRepo) (*Room, *Client, *Client) {
 	state := &domain.Room{ID: "game-room", Type: domain.RoomTypePublic, Language: "en", State: domain.RoomStateLobby, MinPlayers: 2, MaxPlayers: 8, RoundTime: 30, MaxRounds: 1}
-	room := NewRoom(state, func(string, string) {}, nil, profileRepo, nil)
+	room := NewRoom(state, func(string, string) {}, nil, profileRepo, nil, nil)
 	drawer := &Client{ID: "drawer-conn", UserID: "drawer", Username: "Alice", Send: make(chan []byte, 50), Done: make(chan struct{})}
 	guesser := &Client{ID: "guesser-conn", UserID: "guesser", Username: "Bob", Send: make(chan []byte, 50), Done: make(chan struct{})}
 	return room, drawer, guesser

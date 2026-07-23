@@ -33,21 +33,21 @@ func (m *mockStorage) GetURL(ctx context.Context, b, n string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func setupAdminDeps(t *testing.T) (config.Config, repositories.AdminRepository, repositories.ContentRepository, repositories.UserRepository, repositories.ProfileRepository, repositories.SessionRepository, *mockStorage) {
+func setupAdminDeps(t *testing.T) (config.Config, repositories.AdminRepository, repositories.ContentRepository, repositories.ReportRepository, repositories.ReputationRepository, repositories.UserRepository, repositories.ProfileRepository, repositories.SessionRepository, *mockStorage) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	db.AutoMigrate(&domain.Song{}, &domain.GlobalSetting{}, &domain.User{}, &domain.Profile{}, &domain.BadWord{})
+	db.AutoMigrate(&domain.Song{}, &domain.GlobalSetting{}, &domain.User{}, &domain.Profile{}, &domain.BadWord{}, &domain.Report{}, &domain.ReputationEvent{})
 
 	cfg := config.Get()
 	cfg.App.Storage.BucketName = "b"
 
 	cacheClient, _ := cache.NewClient(config.CacheConfig{Driver: "memory"})
 
-	return cfg, repositories.NewAdminRepo(db), repositories.NewContentRepo(db), repositories.NewUserRepo(db), repositories.NewProfileRepo(db), repositories.NewSessionRepo(cacheClient), new(mockStorage)
+	return cfg, repositories.NewAdminRepo(db), repositories.NewContentRepo(db), repositories.NewReportRepo(db), repositories.NewReputationRepo(db), repositories.NewUserRepo(db), repositories.NewProfileRepo(db), repositories.NewSessionRepo(cacheClient), new(mockStorage)
 }
 
 func TestAdminService(t *testing.T) {
-	cfg, aRepo, cRepo, uRepo, pRepo, sRepo, mStore := setupAdminDeps(t)
-	svc := NewAdminService(cfg, aRepo, uRepo, pRepo, sRepo, mStore, cRepo)
+	cfg, aRepo, cRepo, rRepo, repRepo, uRepo, pRepo, sRepo, mStore := setupAdminDeps(t)
+	svc := NewAdminService(cfg, aRepo, uRepo, pRepo, sRepo, mStore, cRepo, rRepo, repRepo)
 	ctx := context.Background()
 
 	// Songs
@@ -73,6 +73,18 @@ func TestAdminService(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
 	assert.NoError(t, svc.DeleteBadWord(ctx, bw.ID))
+
+	// Reports
+	uRepo.Insert(&domain.User{ID: "reported", Username: "reported"})
+	pRepo.Insert(&domain.Profile{UserID: "reported", ReputationScore: 10000})
+	rRepo.InsertReport(ctx, &domain.Report{ID: "rep1", ReporterID: "u1", ReportedID: "reported", Reason: domain.ReportReasonCheating, Status: domain.ReportStatusPending})
+	reports, err := svc.ListReports(ctx, domain.ReportStatusPending, domain.Paging{Limit: 10})
+	assert.NoError(t, err)
+	assert.NotNil(t, reports)
+	report, err := svc.GetReport(ctx, "rep1")
+	assert.NoError(t, err)
+	assert.Equal(t, "rep1", report.ID)
+	assert.NoError(t, svc.ConfirmReport(ctx, "rep1", "admin", "confirmed"))
 
 	// Settings
 	svc.UpdateGlobalSetting(ctx, "k", "v")

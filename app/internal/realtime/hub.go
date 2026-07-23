@@ -32,16 +32,23 @@ type Hub struct {
 	contentRepo    repositories.ContentRepository
 	profileRepo    repositories.ProfileRepository
 	reputationRepo repositories.ReputationRepository
+	reportRepo     repositories.ReportRepository
 }
 
 func NewHub(roomRepo repositories.RoomRepository) *Hub {
 	return NewHubWithDependencies(roomRepo, nil, nil)
 }
 
-func NewHubWithDependencies(roomRepo repositories.RoomRepository, contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo ...repositories.ReputationRepository) *Hub {
+func NewHubWithDependencies(roomRepo repositories.RoomRepository, contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, extraRepos ...interface{}) *Hub {
 	var repRepo repositories.ReputationRepository
-	if len(reputationRepo) > 0 {
-		repRepo = reputationRepo[0]
+	var reportRepo repositories.ReportRepository
+	for _, repo := range extraRepos {
+		switch typed := repo.(type) {
+		case repositories.ReputationRepository:
+			repRepo = typed
+		case repositories.ReportRepository:
+			reportRepo = typed
+		}
 	}
 	return &Hub{
 		rooms:          make(map[string]*Room),
@@ -51,6 +58,7 @@ func NewHubWithDependencies(roomRepo repositories.RoomRepository, contentRepo re
 		contentRepo:    contentRepo,
 		profileRepo:    profileRepo,
 		reputationRepo: repRepo,
+		reportRepo:     reportRepo,
 	}
 }
 
@@ -88,7 +96,7 @@ func (h *Hub) startRoom(ctx context.Context, state *domain.Room) *Room {
 	if existing, ok := h.rooms[state.ID]; ok {
 		return existing
 	}
-	room := NewRoom(state, h.onRoomClosed, h.contentRepo, h.profileRepo, h.reputationRepo)
+	room := NewRoom(state, h.onRoomClosed, h.contentRepo, h.profileRepo, h.reputationRepo, h.reportRepo)
 	h.rooms[state.ID] = room
 	if _, ok := h.loads[state.ID]; !ok {
 		h.loads[state.ID] = 0

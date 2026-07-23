@@ -89,7 +89,7 @@
 				
 				<option value="file16">drawo/internal/core/ports/repositories/profile_repository.go (85.7%)</option>
 				
-				<option value="file17">drawo/internal/core/ports/repositories/report_repository.go (100.0%)</option>
+				<option value="file17">drawo/internal/core/ports/repositories/report_repository.go (50.0%)</option>
 				
 				<option value="file18">drawo/internal/core/ports/repositories/reputation_repository.go (85.7%)</option>
 				
@@ -101,7 +101,7 @@
 				
 				<option value="file22">drawo/internal/core/ports/repositories/user_settings_repository.go (83.3%)</option>
 				
-				<option value="file23">drawo/internal/core/ports/services/admin_service.go (76.1%)</option>
+				<option value="file23">drawo/internal/core/ports/services/admin_service.go (74.8%)</option>
 				
 				<option value="file24">drawo/internal/core/ports/services/auth_service.go (81.8%)</option>
 				
@@ -115,7 +115,7 @@
 				
 				<option value="file29">drawo/internal/core/ports/services/user_service.go (92.4%)</option>
 				
-				<option value="file30">drawo/internal/delivery/http/controllers/admin_controller.go (34.7%)</option>
+				<option value="file30">drawo/internal/delivery/http/controllers/admin_controller.go (40.2%)</option>
 				
 				<option value="file31">drawo/internal/delivery/http/controllers/auth_controller.go (86.5%)</option>
 				
@@ -133,7 +133,7 @@
 				
 				<option value="file38">drawo/internal/delivery/http/middlewares/request_id.go (100.0%)</option>
 				
-				<option value="file39">drawo/internal/delivery/http/routes/routes.go (95.3%)</option>
+				<option value="file39">drawo/internal/delivery/http/routes/routes.go (95.7%)</option>
 				
 				<option value="file40">drawo/internal/delivery/websocket/controller.go (0.0%)</option>
 				
@@ -165,29 +165,31 @@
 				
 				<option value="file54">drawo/internal/realtime/guess.go (92.9%)</option>
 				
-				<option value="file55">drawo/internal/realtime/handler.go (67.4%)</option>
+				<option value="file55">drawo/internal/realtime/handler.go (66.5%)</option>
 				
-				<option value="file56">drawo/internal/realtime/hub.go (82.6%)</option>
+				<option value="file56">drawo/internal/realtime/hub.go (81.5%)</option>
 				
 				<option value="file57">drawo/internal/realtime/moderation.go (100.0%)</option>
 				
-				<option value="file58">drawo/internal/realtime/reputation.go (76.7%)</option>
+				<option value="file58">drawo/internal/realtime/report.go (74.0%)</option>
 				
-				<option value="file59">drawo/internal/realtime/room.go (79.0%)</option>
+				<option value="file59">drawo/internal/realtime/reputation.go (76.7%)</option>
 				
-				<option value="file60">drawo/main.go (0.0%)</option>
+				<option value="file60">drawo/internal/realtime/room.go (77.7%)</option>
 				
-				<option value="file61">drawo/pkg/errors/errors.go (100.0%)</option>
+				<option value="file61">drawo/main.go (0.0%)</option>
 				
-				<option value="file62">drawo/pkg/i18n/i18n.go (81.4%)</option>
+				<option value="file62">drawo/pkg/errors/errors.go (100.0%)</option>
 				
-				<option value="file63">drawo/pkg/logger/logger.go (95.7%)</option>
+				<option value="file63">drawo/pkg/i18n/i18n.go (81.4%)</option>
 				
-				<option value="file64">drawo/pkg/security/jwt.go (80.0%)</option>
+				<option value="file64">drawo/pkg/logger/logger.go (95.7%)</option>
 				
-				<option value="file65">drawo/pkg/security/password.go (77.8%)</option>
+				<option value="file65">drawo/pkg/security/jwt.go (80.0%)</option>
 				
-				<option value="file66">drawo/pkg/validator/validator.go (92.9%)</option>
+				<option value="file66">drawo/pkg/security/password.go (77.8%)</option>
+				
+				<option value="file67">drawo/pkg/validator/validator.go (92.9%)</option>
 				
 				</select>
 			</div>
@@ -1251,13 +1253,18 @@ func (r *profileRepo) Update(profile *domain.Profile) error <span class="cov8" t
 
 import (
         "context"
+
         "drawo/internal/core/domain"
         "gorm.io/gorm"
 )
 
 type ReportRepository interface {
         InsertReport(ctx context.Context, report *domain.Report) error
+        GetReportByID(ctx context.Context, id string) (*domain.Report, error)
+        UpdateReport(ctx context.Context, report *domain.Report) error
         ListReports(ctx context.Context, paging domain.Paging) (*domain.PageOf[domain.Report], error)
+        ListReportsByStatus(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error)
+        CountRoundReports(ctx context.Context, roomID string, round int, reportedID string, reason domain.ReportReason) (int64, error)
 }
 
 type reportRepo struct {
@@ -1272,13 +1279,53 @@ func (r *reportRepo) InsertReport(ctx context.Context, report *domain.Report) er
         return r.db.WithContext(ctx).Create(report).Error
 }</span>
 
-func (r *reportRepo) ListReports(ctx context.Context, paging domain.Paging) (*domain.PageOf[domain.Report], error) <span class="cov8" title="1">{
-        var list []domain.Report
-        var total int64
-        r.db.WithContext(ctx).Model(&amp;domain.Report{}).Count(&amp;total)
-        r.db.WithContext(ctx).Limit(paging.Limit).Offset(paging.Offset).Order("created_at desc").Find(&amp;list)
-        return &amp;domain.PageOf[domain.Report]{Items: list, Total: total, Limit: paging.Limit, Offset: paging.Offset}, nil
+func (r *reportRepo) GetReportByID(ctx context.Context, id string) (*domain.Report, error) <span class="cov0" title="0">{
+        var report domain.Report
+        if err := r.db.WithContext(ctx).Where("id = ?", id).First(&amp;report).Error; err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return &amp;report, nil</span>
+}
+
+func (r *reportRepo) UpdateReport(ctx context.Context, report *domain.Report) error <span class="cov0" title="0">{
+        return r.db.WithContext(ctx).Where("id = ?", report.ID).Save(report).Error
 }</span>
+
+func (r *reportRepo) ListReports(ctx context.Context, paging domain.Paging) (*domain.PageOf[domain.Report], error) <span class="cov8" title="1">{
+        return r.list(ctx, "", paging)
+}</span>
+
+func (r *reportRepo) ListReportsByStatus(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error) <span class="cov0" title="0">{
+        return r.list(ctx, status, paging)
+}</span>
+
+func (r *reportRepo) CountRoundReports(ctx context.Context, roomID string, round int, reportedID string, reason domain.ReportReason) (int64, error) <span class="cov0" title="0">{
+        var total int64
+        err := r.db.WithContext(ctx).
+                Model(&amp;domain.Report{}).
+                Where("room_id = ? AND round = ? AND reported_id = ? AND reason = ?", roomID, round, reportedID, reason).
+                Count(&amp;total).Error
+        return total, err
+}</span>
+
+func (r *reportRepo) list(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error) <span class="cov8" title="1">{
+        if paging.Limit &lt;= 0 || paging.Limit &gt; 100 </span><span class="cov8" title="1">{
+                paging.Limit = 50
+        }</span>
+        <span class="cov8" title="1">var list []domain.Report
+        var total int64
+        query := r.db.WithContext(ctx).Model(&amp;domain.Report{})
+        if status != "" </span><span class="cov0" title="0">{
+                query = query.Where("status = ?", status)
+        }</span>
+        <span class="cov8" title="1">if err := query.Count(&amp;total).Error; err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := query.Limit(paging.Limit).Offset(paging.Offset).Order("created_at desc").Find(&amp;list).Error; err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return &amp;domain.PageOf[domain.Report]{Items: list, Total: total, Limit: paging.Limit, Offset: paging.Offset}, nil</span>
+}
 </pre>
 		
 		<pre class="file" id="file18" style="display: none">package repositories
@@ -1697,6 +1744,10 @@ type AdminService interface {
         SearchUsers(ctx context.Context, query string) ([]domain.UserWithProfile, error)
         BanUser(ctx context.Context, userID string) error
         UnbanUser(ctx context.Context, userID string) error
+        ListReports(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error)
+        GetReport(ctx context.Context, id string) (*domain.Report, error)
+        ConfirmReport(ctx context.Context, id, adminID, note string) error
+        RejectReport(ctx context.Context, id, adminID, note string) error
 
         // Bad words
         CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error)
@@ -1708,13 +1759,15 @@ type AdminService interface {
 }
 
 type adminService struct {
-        cfg         config.Config
-        adminRepo   repositories.AdminRepository
-        contentRepo repositories.ContentRepository
-        userRepo    repositories.UserRepository
-        profileRepo repositories.ProfileRepository
-        sessionRepo repositories.SessionRepository
-        storage     repositories.FileStorage
+        cfg            config.Config
+        adminRepo      repositories.AdminRepository
+        contentRepo    repositories.ContentRepository
+        reportRepo     repositories.ReportRepository
+        reputationRepo repositories.ReputationRepository
+        userRepo       repositories.UserRepository
+        profileRepo    repositories.ProfileRepository
+        sessionRepo    repositories.SessionRepository
+        storage        repositories.FileStorage
 }
 
 // NewAdminService creates the service responsible for site configuration and moderation.
@@ -1725,20 +1778,29 @@ func NewAdminService(
         profileRepo repositories.ProfileRepository,
         sessionRepo repositories.SessionRepository,
         storage repositories.FileStorage,
-        contentRepos ...repositories.ContentRepository,
+        contentRepo repositories.ContentRepository,
+        extraRepos ...interface{},
 ) AdminService <span class="cov8" title="1">{
-        var contentRepo repositories.ContentRepository
-        if len(contentRepos) &gt; 0 </span><span class="cov8" title="1">{
-                contentRepo = contentRepos[0]
-        }</span>
+        var reportRepo repositories.ReportRepository
+        var reputationRepo repositories.ReputationRepository
+        for _, repo := range extraRepos </span><span class="cov8" title="1">{
+                switch typed := repo.(type) </span>{
+                case repositories.ReportRepository:<span class="cov8" title="1">
+                        reportRepo = typed</span>
+                case repositories.ReputationRepository:<span class="cov8" title="1">
+                        reputationRepo = typed</span>
+                }
+        }
         <span class="cov8" title="1">return &amp;adminService{
-                cfg:         cfg,
-                adminRepo:   adminRepo,
-                contentRepo: contentRepo,
-                userRepo:    userRepo,
-                profileRepo: profileRepo,
-                sessionRepo: sessionRepo,
-                storage:     storage,
+                cfg:            cfg,
+                adminRepo:      adminRepo,
+                contentRepo:    contentRepo,
+                reportRepo:     reportRepo,
+                reputationRepo: reputationRepo,
+                userRepo:       userRepo,
+                profileRepo:    profileRepo,
+                sessionRepo:    sessionRepo,
+                storage:        storage,
         }</span>
 }
 
@@ -1831,6 +1893,81 @@ func (s *adminService) UnbanUser(ctx context.Context, userID string) error <span
         }</span>
         <span class="cov8" title="1">user.IsActive = true
         return s.userRepo.Update(user)</span>
+}
+
+func (s *adminService) ListReports(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error) <span class="cov8" title="1">{
+        if s.reportRepo == nil </span><span class="cov0" title="0">{
+                return nil, errors.New(errors.ErrInternalServer, "report repository is not configured")
+        }</span>
+        <span class="cov8" title="1">if status != "" </span><span class="cov8" title="1">{
+                return s.reportRepo.ListReportsByStatus(ctx, status, paging)
+        }</span>
+        <span class="cov0" title="0">return s.reportRepo.ListReports(ctx, paging)</span>
+}
+
+func (s *adminService) GetReport(ctx context.Context, id string) (*domain.Report, error) <span class="cov8" title="1">{
+        if s.reportRepo == nil </span><span class="cov0" title="0">{
+                return nil, errors.New(errors.ErrInternalServer, "report repository is not configured")
+        }</span>
+        <span class="cov8" title="1">report, err := s.reportRepo.GetReportByID(ctx, strings.TrimSpace(id))
+        if err != nil || report == nil </span><span class="cov0" title="0">{
+                return nil, errors.New(errors.ErrNotFound, "report not found")
+        }</span>
+        <span class="cov8" title="1">return report, nil</span>
+}
+
+func (s *adminService) ConfirmReport(ctx context.Context, id, adminID, note string) error <span class="cov8" title="1">{
+        return s.reviewReport(ctx, id, adminID, note, domain.ReportStatusConfirmed)
+}</span>
+
+func (s *adminService) RejectReport(ctx context.Context, id, adminID, note string) error <span class="cov0" title="0">{
+        return s.reviewReport(ctx, id, adminID, note, domain.ReportStatusRejected)
+}</span>
+
+func (s *adminService) reviewReport(ctx context.Context, id, adminID, note string, status domain.ReportStatus) error <span class="cov8" title="1">{
+        report, err := s.GetReport(ctx, id)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">if report.Status != "" &amp;&amp; report.Status != domain.ReportStatusPending </span><span class="cov0" title="0">{
+                return errors.New(errors.ErrConflict, "report already reviewed")
+        }</span>
+        <span class="cov8" title="1">now := time.Now()
+        report.Status = status
+        report.ReviewedBy = adminID
+        report.ReviewedAt = &amp;now
+        report.ResolutionNote = strings.TrimSpace(note)
+        if err := s.reportRepo.UpdateReport(ctx, report); err != nil </span><span class="cov0" title="0">{
+                return errors.New(errors.ErrInternalServer, "failed to update report")
+        }</span>
+        <span class="cov8" title="1">if status == domain.ReportStatusConfirmed </span><span class="cov8" title="1">{
+                s.applyConfirmedReportPenalty(ctx, report)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (s *adminService) applyConfirmedReportPenalty(ctx context.Context, report *domain.Report) <span class="cov8" title="1">{
+        delta := int64(-200)
+        switch report.Reason </span>{
+        case domain.ReportReasonCheating:<span class="cov8" title="1">
+                delta = -300</span>
+        case domain.ReportReasonInappropriateDrawing:<span class="cov0" title="0">
+                delta = -1000</span>
+        case domain.ReportReasonAbusiveChat:<span class="cov0" title="0">
+                delta = -300</span>
+        case domain.ReportReasonGriefing:<span class="cov0" title="0">
+                delta = -200</span>
+        }
+        <span class="cov8" title="1">if s.reputationRepo != nil </span><span class="cov8" title="1">{
+                _ = s.reputationRepo.InsertEvent(ctx, &amp;domain.ReputationEvent{ID: uuid.New().String(), UserID: report.ReportedID, Delta: delta, Reason: "report_confirmed_" + string(report.Reason), RoomID: report.RoomID, Round: report.Round, CreatedAt: time.Now()})
+        }</span>
+        <span class="cov8" title="1">if profile, err := s.profileRepo.GetByUserID(report.ReportedID); err == nil &amp;&amp; profile != nil </span><span class="cov8" title="1">{
+                profile.ReputationScore += delta
+                if profile.ReputationScore &lt; 0 </span><span class="cov0" title="0">{
+                        profile.ReputationScore = 0
+                }</span>
+                <span class="cov8" title="1">_ = s.profileRepo.Update(profile)</span>
+        }
 }
 
 func (s *adminService) CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error) <span class="cov8" title="1">{
@@ -2780,6 +2917,60 @@ func (ctrl *AdminController) DeleteBadWord(c *gin.Context) <span class="cov8" ti
         }</span>
         <span class="cov8" title="1">c.JSON(http.StatusOK, gin.H{"message": "bad word deleted"})</span>
 }
+
+// ReviewReportRequest defines the admin note for a report review decision.
+type ReviewReportRequest struct {
+        Note string `json:"note"`
+}
+
+// ListReports returns moderation reports, optionally filtered by status.
+func (ctrl *AdminController) ListReports(c *gin.Context) <span class="cov8" title="1">{
+        paging := domain.Paging{Limit: 50, Offset: 0}
+        reports, err := ctrl.adminSvc.ListReports(c.Request.Context(), domain.ReportStatus(c.Query("status")), paging)
+        if err != nil </span><span class="cov0" title="0">{
+                appErr, _ := err.(*errors.AppError)
+                c.JSON(appErr.Response())
+                return
+        }</span>
+        <span class="cov8" title="1">c.JSON(http.StatusOK, reports)</span>
+}
+
+// GetReport returns a single moderation report with its stored evidence.
+func (ctrl *AdminController) GetReport(c *gin.Context) <span class="cov8" title="1">{
+        report, err := ctrl.adminSvc.GetReport(c.Request.Context(), c.Param("id"))
+        if err != nil </span><span class="cov0" title="0">{
+                appErr, _ := err.(*errors.AppError)
+                c.JSON(appErr.Response())
+                return
+        }</span>
+        <span class="cov8" title="1">c.JSON(http.StatusOK, report)</span>
+}
+
+// ConfirmReport marks a report as valid and applies a reputation penalty.
+func (ctrl *AdminController) ConfirmReport(c *gin.Context) <span class="cov8" title="1">{
+        var req ReviewReportRequest
+        _ = c.ShouldBindJSON(&amp;req)
+        adminID := c.GetString("userID")
+        if err := ctrl.adminSvc.ConfirmReport(c.Request.Context(), c.Param("id"), adminID, req.Note); err != nil </span><span class="cov0" title="0">{
+                appErr, _ := err.(*errors.AppError)
+                c.JSON(appErr.Response())
+                return
+        }</span>
+        <span class="cov8" title="1">c.JSON(http.StatusOK, gin.H{"message": "report confirmed"})</span>
+}
+
+// RejectReport marks a report as invalid without penalizing the reported user.
+func (ctrl *AdminController) RejectReport(c *gin.Context) <span class="cov8" title="1">{
+        var req ReviewReportRequest
+        _ = c.ShouldBindJSON(&amp;req)
+        adminID := c.GetString("userID")
+        if err := ctrl.adminSvc.RejectReport(c.Request.Context(), c.Param("id"), adminID, req.Note); err != nil </span><span class="cov0" title="0">{
+                appErr, _ := err.(*errors.AppError)
+                c.JSON(appErr.Response())
+                return
+        }</span>
+        <span class="cov8" title="1">c.JSON(http.StatusOK, gin.H{"message": "report rejected"})</span>
+}
 </pre>
 		
 		<pre class="file" id="file31" style="display: none">// Package controllers handles incoming HTTP requests and returns JSON responses.
@@ -3461,6 +3652,12 @@ func Register(router *gin.Engine, container *di.Container) <span class="cov8" ti
                         admin.POST("/bad-words", adminCtrl.CreateBadWord)
                         admin.GET("/bad-words", adminCtrl.ListBadWords)
                         admin.DELETE("/bad-words/:id", adminCtrl.DeleteBadWord)
+
+                        // Report moderation
+                        admin.GET("/reports", adminCtrl.ListReports)
+                        admin.GET("/reports/:id", adminCtrl.GetReport)
+                        admin.POST("/reports/:id/confirm", adminCtrl.ConfirmReport)
+                        admin.POST("/reports/:id/reject", adminCtrl.RejectReport)
 
                         // Settings
                         admin.PATCH("/settings/:key", adminCtrl.UpdateSetting)
@@ -4357,7 +4554,7 @@ func NewContainer(cfg config.Config) (*Container, error) <span class="cov8" titl
         _ = repositories.NewFriendshipRepo(dbConn.DB)
         _ = repositories.NewFriendRequestRepo(dbConn.DB)
         _ = repositories.NewGameHistoryRepo(dbConn.DB)
-        _ = repositories.NewReportRepo(dbConn.DB)
+        reportRepo := repositories.NewReportRepo(dbConn.DB)
         _ = repositories.NewAchievementRepo(dbConn.DB)
         _ = repositories.NewPlayerStatisticRepo(dbConn.DB)
         _ = repositories.NewUserSettingsRepo(dbConn.DB)
@@ -4378,7 +4575,7 @@ func NewContainer(cfg config.Config) (*Container, error) <span class="cov8" titl
         authSvc := services.NewAuthService(cfg, userRepo, profileRepo, sessionRepo, rateLimiter)
         userSvc := services.NewUserService(userRepo, profileRepo, otpRepo, otpSvc)
         roomSvc := services.NewRoomService(roomRepo)
-        adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider, contentRepo)
+        adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider, contentRepo, reportRepo, reputationRepo)
 
         hub := realtime.NewHubWithDependencies(roomRepo, contentRepo, profileRepo, reputationRepo)
 
@@ -5496,7 +5693,7 @@ func (h *Handler) writePump(ctx context.Context, client *Client, authCtx *AuthCo
                         return</span>
                 case message, ok := &lt;-client.Send:<span class="cov8" title="1">
                         _ = client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-                        if !ok </span><span class="cov8" title="1">{
+                        if !ok </span><span class="cov0" title="0">{
                                 _ = client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
                                 return
                         }</span>
@@ -5686,17 +5883,24 @@ type Hub struct {
         contentRepo    repositories.ContentRepository
         profileRepo    repositories.ProfileRepository
         reputationRepo repositories.ReputationRepository
+        reportRepo     repositories.ReportRepository
 }
 
 func NewHub(roomRepo repositories.RoomRepository) *Hub <span class="cov8" title="1">{
         return NewHubWithDependencies(roomRepo, nil, nil)
 }</span>
 
-func NewHubWithDependencies(roomRepo repositories.RoomRepository, contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo ...repositories.ReputationRepository) *Hub <span class="cov8" title="1">{
+func NewHubWithDependencies(roomRepo repositories.RoomRepository, contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, extraRepos ...interface{}) *Hub <span class="cov8" title="1">{
         var repRepo repositories.ReputationRepository
-        if len(reputationRepo) &gt; 0 </span><span class="cov0" title="0">{
-                repRepo = reputationRepo[0]
-        }</span>
+        var reportRepo repositories.ReportRepository
+        for _, repo := range extraRepos </span><span class="cov0" title="0">{
+                switch typed := repo.(type) </span>{
+                case repositories.ReputationRepository:<span class="cov0" title="0">
+                        repRepo = typed</span>
+                case repositories.ReportRepository:<span class="cov0" title="0">
+                        reportRepo = typed</span>
+                }
+        }
         <span class="cov8" title="1">return &amp;Hub{
                 rooms:          make(map[string]*Room),
                 loads:          make(map[string]int),
@@ -5705,6 +5909,7 @@ func NewHubWithDependencies(roomRepo repositories.RoomRepository, contentRepo re
                 contentRepo:    contentRepo,
                 profileRepo:    profileRepo,
                 reputationRepo: repRepo,
+                reportRepo:     reportRepo,
         }</span>
 }
 
@@ -5742,7 +5947,7 @@ func (h *Hub) startRoom(ctx context.Context, state *domain.Room) *Room <span cla
         if existing, ok := h.rooms[state.ID]; ok </span><span class="cov0" title="0">{
                 return existing
         }</span>
-        <span class="cov8" title="1">room := NewRoom(state, h.onRoomClosed, h.contentRepo, h.profileRepo, h.reputationRepo)
+        <span class="cov8" title="1">room := NewRoom(state, h.onRoomClosed, h.contentRepo, h.profileRepo, h.reputationRepo, h.reportRepo)
         h.rooms[state.ID] = room
         if _, ok := h.loads[state.ID]; !ok </span><span class="cov8" title="1">{
                 h.loads[state.ID] = 0
@@ -5972,6 +6177,151 @@ func NormalizeModerationText(input, lang string) string <span class="cov8" title
 
 import (
         "context"
+        "encoding/json"
+        "fmt"
+        "strings"
+        "time"
+
+        "github.com/google/uuid"
+
+        "drawo/internal/core/domain"
+)
+
+const (
+        maxReportDetailsLength  = 500
+        reportPenaltyTwoUsers   = int64(-50)
+        reportPenaltyThreeUsers = int64(-150)
+        maxEvidenceCanvasOps    = 300
+)
+
+type ReportPayload struct {
+        Event          string              `json:"event"`
+        ReportedUserID string              `json:"reported_user_id"`
+        Reason         domain.ReportReason `json:"reason"`
+        Details        string              `json:"details,omitempty"`
+}
+
+type ReportEvidence struct {
+        RoomID      string          `json:"room_id"`
+        Round       int             `json:"round"`
+        GameState   string          `json:"game_state"`
+        ReporterID  string          `json:"reporter_id"`
+        ReportedID  string          `json:"reported_id"`
+        DrawerID    string          `json:"drawer_id,omitempty"`
+        WordGroupID string          `json:"word_group_id,omitempty"`
+        WordText    string          `json:"word_text,omitempty"`
+        CanvasOps   []DrawOperation `json:"canvas_ops"`
+        ChatHistory []ChatPayload   `json:"chat_history"`
+        CreatedAt   int64           `json:"created_at"`
+}
+
+func (r *Room) handleReportEvent(client *Client, payload ReportPayload) <span class="cov8" title="1">{
+        if r.reportRepo == nil </span><span class="cov0" title="0">{
+                r.sendError(client, "reports_unavailable", "reporting is not configured")
+                return
+        }</span>
+        <span class="cov8" title="1">payload.ReportedUserID = strings.TrimSpace(payload.ReportedUserID)
+        payload.Details = strings.TrimSpace(payload.Details)
+        if len(payload.Details) &gt; maxReportDetailsLength </span><span class="cov0" title="0">{
+                r.sendError(client, "invalid_report", "report details are too long")
+                return
+        }</span>
+        <span class="cov8" title="1">if payload.ReportedUserID == "" || r.players[payload.ReportedUserID] == nil </span><span class="cov0" title="0">{
+                r.sendError(client, "invalid_report", "reported player is not in this room")
+                return
+        }</span>
+        <span class="cov8" title="1">if payload.ReportedUserID == client.UserID </span><span class="cov8" title="1">{
+                r.sendError(client, "invalid_report", "you cannot report yourself")
+                return
+        }</span>
+        <span class="cov8" title="1">if !validReportReason(payload.Reason) </span><span class="cov0" title="0">{
+                r.sendError(client, "invalid_report", "invalid report reason")
+                return
+        }</span>
+        <span class="cov8" title="1">key := fmt.Sprintf("%d:%s:%s:%s", r.state.CurrentRound, client.UserID, payload.ReportedUserID, payload.Reason)
+        if _, exists := r.reportKeys[key]; exists </span><span class="cov8" title="1">{
+                r.sendError(client, "duplicate_report", "you already reported this player for this reason")
+                return
+        }</span>
+        <span class="cov8" title="1">r.reportKeys[key] = struct{}{}
+
+        evidenceJSON, _ := json.Marshal(r.buildReportEvidence(client.UserID, payload.ReportedUserID))
+        report := &amp;domain.Report{
+                ID:         uuid.New().String(),
+                ReporterID: client.UserID,
+                ReportedID: payload.ReportedUserID,
+                RoomID:     r.state.ID,
+                Round:      r.state.CurrentRound,
+                Reason:     payload.Reason,
+                Details:    payload.Details,
+                Status:     domain.ReportStatusPending,
+                Evidence:   string(evidenceJSON),
+                CreatedAt:  time.Now(),
+        }
+        if err := r.reportRepo.InsertReport(context.Background(), report); err != nil </span><span class="cov0" title="0">{
+                r.sendError(client, "report_failed", "could not store report")
+                return
+        }</span>
+        <span class="cov8" title="1">r.applyAggregatedReportPenalty(payload.ReportedUserID, payload.Reason, client.UserID)
+        r.sendSystem(client, EventGame, map[string]any{"event": "report_submitted", "report_id": report.ID})</span>
+}
+
+func (r *Room) buildReportEvidence(reporterID, reportedID string) ReportEvidence <span class="cov8" title="1">{
+        canvasOps := r.canvasOps
+        if len(canvasOps) &gt; maxEvidenceCanvasOps </span><span class="cov0" title="0">{
+                canvasOps = canvasOps[len(canvasOps)-maxEvidenceCanvasOps:]
+        }</span>
+        <span class="cov8" title="1">wordText := ""
+        wordGroupID := ""
+        if r.currentWord != nil </span><span class="cov8" title="1">{
+                wordText = r.currentWord.Text
+                wordGroupID = r.currentWord.GroupID
+        }</span>
+        <span class="cov8" title="1">return ReportEvidence{
+                RoomID:      r.state.ID,
+                Round:       r.state.CurrentRound,
+                GameState:   r.gameState,
+                ReporterID:  reporterID,
+                ReportedID:  reportedID,
+                DrawerID:    r.state.CurrentDrawerID,
+                WordText:    wordText,
+                WordGroupID: wordGroupID,
+                CanvasOps:   append([]DrawOperation(nil), canvasOps...),
+                ChatHistory: append([]ChatPayload(nil), r.chatHistory...),
+                CreatedAt:   time.Now().Unix(),
+        }</span>
+}
+
+func (r *Room) applyAggregatedReportPenalty(reportedID string, reason domain.ReportReason, reporterID string) <span class="cov8" title="1">{
+        key := fmt.Sprintf("%d:%s:%s", r.state.CurrentRound, reportedID, reason)
+        reporters := r.roundReports[key]
+        if reporters == nil </span><span class="cov8" title="1">{
+                reporters = make(map[string]struct{})
+                r.roundReports[key] = reporters
+        }</span>
+        <span class="cov8" title="1">reporters[reporterID] = struct{}{}
+        switch len(reporters) </span>{
+        case 2:<span class="cov8" title="1">
+                r.reputation.add(reportedID, reportPenaltyTwoUsers, "multiple_reports")</span>
+        case 3:<span class="cov0" title="0">
+                r.reputation.add(reportedID, reportPenaltyThreeUsers, "multiple_reports")</span>
+        }
+}
+
+func validReportReason(reason domain.ReportReason) bool <span class="cov8" title="1">{
+        switch reason </span>{
+        case domain.ReportReasonInappropriateDrawing, domain.ReportReasonAbusiveChat, domain.ReportReasonCheating, domain.ReportReasonGriefing:<span class="cov8" title="1">
+                return true</span>
+        default:<span class="cov0" title="0">
+                return false</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file59" style="display: none">package realtime
+
+import (
+        "context"
         "time"
 
         "github.com/google/uuid"
@@ -6059,7 +6409,7 @@ func (l *reputationLedger) flush() <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file59" style="display: none">package realtime
+		<pre class="file" id="file60" style="display: none">package realtime
 
 import (
         "context"
@@ -6085,8 +6435,11 @@ type Room struct {
         inbox   chan *RoomEvent
         onClose func(roomID, inviteCode string)
 
-        contentRepo repositories.ContentRepository
-        reputation  *reputationLedger
+        contentRepo  repositories.ContentRepository
+        reputation   *reputationLedger
+        reportRepo   repositories.ReportRepository
+        reportKeys   map[string]struct{}
+        roundReports map[string]map[string]struct{}
 
         gameState            string
         players              map[string]*PlayerState
@@ -6116,21 +6469,24 @@ type Room struct {
         chatHistory []ChatPayload
 }
 
-func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository) *Room <span class="cov8" title="1">{
+func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, reportRepo repositories.ReportRepository) *Room <span class="cov8" title="1">{
         return &amp;Room{
-                state:       state,
-                clients:     make(map[string]*Client),
-                inbox:       make(chan *RoomEvent, 512),
-                onClose:     onClose,
-                contentRepo: contentRepo,
-                reputation:  newReputationLedger(profileRepo, reputationRepo, state.ID),
-                gameState:   GameStateWaitingForPlayers,
-                players:     make(map[string]*PlayerState),
-                canvasOps:   make([]DrawOperation, 0, 256),
-                redoOps:     make(map[string][]DrawOperation),
-                drawLimits:  make(map[string]*drawLimitState),
-                chatLimits:  make(map[string]*chatLimitState),
-                chatHistory: make([]ChatPayload, 0, 100),
+                state:        state,
+                clients:      make(map[string]*Client),
+                inbox:        make(chan *RoomEvent, 512),
+                onClose:      onClose,
+                contentRepo:  contentRepo,
+                reputation:   newReputationLedger(profileRepo, reputationRepo, state.ID),
+                reportRepo:   reportRepo,
+                reportKeys:   make(map[string]struct{}),
+                roundReports: make(map[string]map[string]struct{}),
+                gameState:    GameStateWaitingForPlayers,
+                players:      make(map[string]*PlayerState),
+                canvasOps:    make([]DrawOperation, 0, 256),
+                redoOps:      make(map[string][]DrawOperation),
+                drawLimits:   make(map[string]*drawLimitState),
+                chatLimits:   make(map[string]*chatLimitState),
+                chatHistory:  make([]ChatPayload, 0, 100),
         }
 }</span>
 
@@ -6605,20 +6961,35 @@ func (r *Room) recordChat(payload ChatPayload) <span class="cov8" title="1">{
 }
 
 func (r *Room) handleGameEvent(e *RoomEvent) <span class="cov0" title="0">{
-        var payload ChooseWordPayload
-        if err := json.Unmarshal(e.Payload, &amp;payload); err != nil </span><span class="cov0" title="0">{
+        var base struct {
+                Event string `json:"event"`
+        }
+        if err := json.Unmarshal(e.Payload, &amp;base); err != nil </span><span class="cov0" title="0">{
                 r.sendError(e.Client, "invalid_game_event", "invalid game event")
                 return
         }</span>
-        <span class="cov0" title="0">if payload.Event != "choose_word" </span><span class="cov0" title="0">{
-                r.sendError(e.Client, "unsupported_game_event", "unsupported game event")
-                return
-        }</span>
-        <span class="cov0" title="0">if r.gameState != GameStateWordSelection || e.Client.UserID != r.state.CurrentDrawerID </span><span class="cov0" title="0">{
-                r.sendError(e.Client, "word_choice_forbidden", "only the current drawer can choose a word")
-                return
-        }</span>
-        <span class="cov0" title="0">r.chooseWord(payload.GroupID)</span>
+        <span class="cov0" title="0">switch base.Event </span>{
+        case "choose_word":<span class="cov0" title="0">
+                var payload ChooseWordPayload
+                if err := json.Unmarshal(e.Payload, &amp;payload); err != nil </span><span class="cov0" title="0">{
+                        r.sendError(e.Client, "invalid_game_event", "invalid word choice")
+                        return
+                }</span>
+                <span class="cov0" title="0">if r.gameState != GameStateWordSelection || e.Client.UserID != r.state.CurrentDrawerID </span><span class="cov0" title="0">{
+                        r.sendError(e.Client, "word_choice_forbidden", "only the current drawer can choose a word")
+                        return
+                }</span>
+                <span class="cov0" title="0">r.chooseWord(payload.GroupID)</span>
+        case "report":<span class="cov0" title="0">
+                var payload ReportPayload
+                if err := json.Unmarshal(e.Payload, &amp;payload); err != nil </span><span class="cov0" title="0">{
+                        r.sendError(e.Client, "invalid_report", "invalid report payload")
+                        return
+                }</span>
+                <span class="cov0" title="0">r.handleReportEvent(e.Client, payload)</span>
+        default:<span class="cov0" title="0">
+                r.sendError(e.Client, "unsupported_game_event", "unsupported game event")</span>
+        }
 }
 
 func (r *Room) startCountdown() <span class="cov8" title="1">{
@@ -6973,7 +7344,7 @@ func displayName(player *PlayerState) string <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file60" style="display: none">// Drawo is a multiplayer drawing game server.
+		<pre class="file" id="file61" style="display: none">// Drawo is a multiplayer drawing game server.
 //
 // This is the application entry point. It delegates to the Cobra command tree
 // so the same binary can serve the API, run migrations, or run other admin tasks.
@@ -6988,7 +7359,7 @@ func main() <span class="cov0" title="0">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file61" style="display: none">// Package errors defines application-wide error types and HTTP response helpers.
+		<pre class="file" id="file62" style="display: none">// Package errors defines application-wide error types and HTTP response helpers.
 //
 // Responsibility:
 //   - Provide sentinel errors that business logic can return.
@@ -7095,7 +7466,7 @@ func ValidationError(fieldErrors map[string][]string) (int, gin.H) <span class="
 }</span>
 </pre>
 		
-		<pre class="file" id="file62" style="display: none">// Package i18n provides high-performance internationalization for Drawo.
+		<pre class="file" id="file63" style="display: none">// Package i18n provides high-performance internationalization for Drawo.
 package i18n
 
 import (
@@ -7212,7 +7583,7 @@ func navigateKey(m map[string]interface{}, key string) string <span class="cov8"
 }
 </pre>
 		
-		<pre class="file" id="file63" style="display: none">// Package logger provides structured, request-aware logging.
+		<pre class="file" id="file64" style="display: none">// Package logger provides structured, request-aware logging.
 //
 // Responsibility:
 //   - Initialize a slog.Logger based on configuration.
@@ -7305,7 +7676,7 @@ func ContextWithUserID(ctx context.Context, userID string) context.Context <span
 }</span>
 </pre>
 		
-		<pre class="file" id="file64" style="display: none">// Package security contains security primitives used across the application.
+		<pre class="file" id="file65" style="display: none">// Package security contains security primitives used across the application.
 package security
 
 import (
@@ -7443,7 +7814,7 @@ func (m *JWTManager) ParseRefreshToken(tokenStr string) (*Claims, error) <span c
 }
 </pre>
 		
-		<pre class="file" id="file65" style="display: none">// Package security contains security primitives used across the application.
+		<pre class="file" id="file66" style="display: none">// Package security contains security primitives used across the application.
 //
 // Responsibility:
 //   - Password hashing and verification.
@@ -7489,7 +7860,7 @@ func GenerateRandomToken(length int) (string, error) <span class="cov8" title="1
 }
 </pre>
 		
-		<pre class="file" id="file66" style="display: none">// Package validator wraps github.com/go-playground/validator/v10.
+		<pre class="file" id="file67" style="display: none">// Package validator wraps github.com/go-playground/validator/v10.
 //
 // Responsibility:
 //   - Provide a single, reusable validator instance.

@@ -28,6 +28,10 @@ type AdminService interface {
 	SearchUsers(ctx context.Context, query string) ([]domain.UserWithProfile, error)
 	BanUser(ctx context.Context, userID string) error
 	UnbanUser(ctx context.Context, userID string) error
+	ListReports(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error)
+	GetReport(ctx context.Context, id string) (*domain.Report, error)
+	ConfirmReport(ctx context.Context, id, adminID, note string) error
+	RejectReport(ctx context.Context, id, adminID, note string) error
 
 	// Bad words
 	CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error)
@@ -39,13 +43,15 @@ type AdminService interface {
 }
 
 type adminService struct {
-	cfg         config.Config
-	adminRepo   repositories.AdminRepository
-	contentRepo repositories.ContentRepository
-	userRepo    repositories.UserRepository
-	profileRepo repositories.ProfileRepository
-	sessionRepo repositories.SessionRepository
-	storage     repositories.FileStorage
+	cfg            config.Config
+	adminRepo      repositories.AdminRepository
+	contentRepo    repositories.ContentRepository
+	reportRepo     repositories.ReportRepository
+	reputationRepo repositories.ReputationRepository
+	userRepo       repositories.UserRepository
+	profileRepo    repositories.ProfileRepository
+	sessionRepo    repositories.SessionRepository
+	storage        repositories.FileStorage
 }
 
 // NewAdminService creates the service responsible for site configuration and moderation.
@@ -56,20 +62,29 @@ func NewAdminService(
 	profileRepo repositories.ProfileRepository,
 	sessionRepo repositories.SessionRepository,
 	storage repositories.FileStorage,
-	contentRepos ...repositories.ContentRepository,
+	contentRepo repositories.ContentRepository,
+	extraRepos ...interface{},
 ) AdminService {
-	var contentRepo repositories.ContentRepository
-	if len(contentRepos) > 0 {
-		contentRepo = contentRepos[0]
+	var reportRepo repositories.ReportRepository
+	var reputationRepo repositories.ReputationRepository
+	for _, repo := range extraRepos {
+		switch typed := repo.(type) {
+		case repositories.ReportRepository:
+			reportRepo = typed
+		case repositories.ReputationRepository:
+			reputationRepo = typed
+		}
 	}
 	return &adminService{
-		cfg:         cfg,
-		adminRepo:   adminRepo,
-		contentRepo: contentRepo,
-		userRepo:    userRepo,
-		profileRepo: profileRepo,
-		sessionRepo: sessionRepo,
-		storage:     storage,
+		cfg:            cfg,
+		adminRepo:      adminRepo,
+		contentRepo:    contentRepo,
+		reportRepo:     reportRepo,
+		reputationRepo: reputationRepo,
+		userRepo:       userRepo,
+		profileRepo:    profileRepo,
+		sessionRepo:    sessionRepo,
+		storage:        storage,
 	}
 }
 
@@ -162,6 +177,81 @@ func (s *adminService) UnbanUser(ctx context.Context, userID string) error {
 	}
 	user.IsActive = true
 	return s.userRepo.Update(user)
+}
+
+func (s *adminService) ListReports(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error) {
+	if s.reportRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "report repository is not configured")
+	}
+	if status != "" {
+		return s.reportRepo.ListReportsByStatus(ctx, status, paging)
+	}
+	return s.reportRepo.ListReports(ctx, paging)
+}
+
+func (s *adminService) GetReport(ctx context.Context, id string) (*domain.Report, error) {
+	if s.reportRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "report repository is not configured")
+	}
+	report, err := s.reportRepo.GetReportByID(ctx, strings.TrimSpace(id))
+	if err != nil || report == nil {
+		return nil, errors.New(errors.ErrNotFound, "report not found")
+	}
+	return report, nil
+}
+
+func (s *adminService) ConfirmReport(ctx context.Context, id, adminID, note string) error {
+	return s.reviewReport(ctx, id, adminID, note, domain.ReportStatusConfirmed)
+}
+
+func (s *adminService) RejectReport(ctx context.Context, id, adminID, note string) error {
+	return s.reviewReport(ctx, id, adminID, note, domain.ReportStatusRejected)
+}
+
+func (s *adminService) reviewReport(ctx context.Context, id, adminID, note string, status domain.ReportStatus) error {
+	report, err := s.GetReport(ctx, id)
+	if err != nil {
+		return err
+	}
+	if report.Status != "" && report.Status != domain.ReportStatusPending {
+		return errors.New(errors.ErrConflict, "report already reviewed")
+	}
+	now := time.Now()
+	report.Status = status
+	report.ReviewedBy = adminID
+	report.ReviewedAt = &now
+	report.ResolutionNote = strings.TrimSpace(note)
+	if err := s.reportRepo.UpdateReport(ctx, report); err != nil {
+		return errors.New(errors.ErrInternalServer, "failed to update report")
+	}
+	if status == domain.ReportStatusConfirmed {
+		s.applyConfirmedReportPenalty(ctx, report)
+	}
+	return nil
+}
+
+func (s *adminService) applyConfirmedReportPenalty(ctx context.Context, report *domain.Report) {
+	delta := int64(-200)
+	switch report.Reason {
+	case domain.ReportReasonCheating:
+		delta = -300
+	case domain.ReportReasonInappropriateDrawing:
+		delta = -1000
+	case domain.ReportReasonAbusiveChat:
+		delta = -300
+	case domain.ReportReasonGriefing:
+		delta = -200
+	}
+	if s.reputationRepo != nil {
+		_ = s.reputationRepo.InsertEvent(ctx, &domain.ReputationEvent{ID: uuid.New().String(), UserID: report.ReportedID, Delta: delta, Reason: "report_confirmed_" + string(report.Reason), RoomID: report.RoomID, Round: report.Round, CreatedAt: time.Now()})
+	}
+	if profile, err := s.profileRepo.GetByUserID(report.ReportedID); err == nil && profile != nil {
+		profile.ReputationScore += delta
+		if profile.ReputationScore < 0 {
+			profile.ReputationScore = 0
+		}
+		_ = s.profileRepo.Update(profile)
+	}
 }
 
 func (s *adminService) CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error) {

@@ -219,3 +219,57 @@ func (ctrl *AdminController) DeleteBadWord(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "bad word deleted"})
 }
+
+// ReviewReportRequest defines the admin note for a report review decision.
+type ReviewReportRequest struct {
+	Note string `json:"note"`
+}
+
+// ListReports returns moderation reports, optionally filtered by status.
+func (ctrl *AdminController) ListReports(c *gin.Context) {
+	paging := domain.Paging{Limit: 50, Offset: 0}
+	reports, err := ctrl.adminSvc.ListReports(c.Request.Context(), domain.ReportStatus(c.Query("status")), paging)
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, reports)
+}
+
+// GetReport returns a single moderation report with its stored evidence.
+func (ctrl *AdminController) GetReport(c *gin.Context) {
+	report, err := ctrl.adminSvc.GetReport(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, report)
+}
+
+// ConfirmReport marks a report as valid and applies a reputation penalty.
+func (ctrl *AdminController) ConfirmReport(c *gin.Context) {
+	var req ReviewReportRequest
+	_ = c.ShouldBindJSON(&req)
+	adminID := c.GetString("userID")
+	if err := ctrl.adminSvc.ConfirmReport(c.Request.Context(), c.Param("id"), adminID, req.Note); err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "report confirmed"})
+}
+
+// RejectReport marks a report as invalid without penalizing the reported user.
+func (ctrl *AdminController) RejectReport(c *gin.Context) {
+	var req ReviewReportRequest
+	_ = c.ShouldBindJSON(&req)
+	adminID := c.GetString("userID")
+	if err := ctrl.adminSvc.RejectReport(c.Request.Context(), c.Param("id"), adminID, req.Note); err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "report rejected"})
+}

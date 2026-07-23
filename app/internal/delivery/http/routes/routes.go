@@ -81,6 +81,12 @@ func Register(router *gin.Engine, container *di.Container) {
 			admin.GET("/bad-words", adminCtrl.ListBadWords)
 			admin.DELETE("/bad-words/:id", adminCtrl.DeleteBadWord)
 
+			// Report moderation
+			admin.GET("/reports", adminCtrl.ListReports)
+			admin.GET("/reports/:id", adminCtrl.GetReport)
+			admin.POST("/reports/:id/confirm", adminCtrl.ConfirmReport)
+			admin.POST("/reports/:id/reject", adminCtrl.RejectReport)
+
 			// Settings
 			admin.PATCH("/settings/:key", adminCtrl.UpdateSetting)
 		}
