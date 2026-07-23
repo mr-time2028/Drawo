@@ -49,7 +49,10 @@ type Room struct {
 
 	// Per-client drawing rate-limit state. It is owned by Room.Run, so it needs
 	// no mutex. This catches canvas griefing such as fill spam and clear spam.
-	drawLimits map[string]*drawLimitState
+	drawLimits  map[string]*drawLimitState
+	chatLimits  map[string]*chatLimitState
+	badWords    badWordCache
+	chatHistory []ChatPayload
 }
 
 func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository) *Room {
@@ -65,6 +68,8 @@ func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repos
 		canvasOps:   make([]DrawOperation, 0, 256),
 		redoOps:     make(map[string][]DrawOperation),
 		drawLimits:  make(map[string]*drawLimitState),
+		chatLimits:  make(map[string]*chatLimitState),
+		chatHistory: make([]ChatPayload, 0, 100),
 	}
 }
 
@@ -438,6 +443,15 @@ func (r *Room) handleChat(e *RoomEvent) {
 		r.sendError(e.Client, "invalid_chat", "chat text is required")
 		return
 	}
+	if !r.allowChat(e.Client.ID) {
+		r.sendError(e.Client, "chat_rate_limited", "too many chat messages")
+		return
+	}
+	if r.containsBadWord(payload.Text) {
+		r.sendError(e.Client, "bad_word", "message contains prohibited words")
+		r.reputation.add(e.Client.UserID, -20, "chat_bad_word")
+		return
+	}
 	player := r.players[e.Client.UserID]
 	if player != nil && player.GuessedWord {
 		r.sendError(e.Client, "already_guessed", "you already guessed this word")
@@ -448,6 +462,7 @@ func (r *Room) handleChat(e *RoomEvent) {
 		return
 	}
 	payload.UserID = e.Client.UserID
+	r.recordChat(payload)
 	e.Payload = mustMarshalRaw(payload)
 	r.broadcast(e, "")
 }
@@ -472,10 +487,59 @@ func (r *Room) handleCorrectGuess(client *Client) {
 		drawer.Score += int64(r.currentWord.Points * 25)
 		r.reputation.addPositiveCapped(drawer.UserID, drawerSuccessRepBonus, "successful_drawing")
 	}
-	r.broadcastSystem(EventChat, ChatPayload{System: true, Message: fmt.Sprintf("%s guessed the word!", displayName(player))})
+	systemMsg := ChatPayload{System: true, Message: fmt.Sprintf("%s guessed the word!", displayName(player))}
+	r.recordChat(systemMsg)
+	r.broadcastSystem(EventChat, systemMsg)
 	r.broadcastGameState()
 	if r.allGuessersDone() {
 		r.endRound()
+	}
+}
+
+func (r *Room) allowChat(clientID string) bool {
+	now := time.Now()
+	state := r.chatLimits[clientID]
+	if state == nil {
+		state = &chatLimitState{windowStart: now}
+		r.chatLimits[clientID] = state
+	}
+	if now.Sub(state.windowStart) >= chatWindowDuration {
+		state.windowStart = now
+		state.count = 0
+	}
+	state.count++
+	return state.count <= maxChatMessagesPerWind
+}
+
+func (r *Room) containsBadWord(text string) bool {
+	if r.contentRepo == nil {
+		return false
+	}
+	now := time.Now()
+	if now.After(r.badWords.expiresAt) {
+		words, err := r.contentRepo.ListBadWords(context.Background(), r.state.Language)
+		if err != nil {
+			words = nil
+		}
+		r.badWords = badWordCache{words: words, loadedAt: now, expiresAt: now.Add(badWordCacheTTL)}
+	}
+	normalizedText := NormalizeModerationText(text, r.state.Language)
+	if normalizedText == "" {
+		return false
+	}
+	for _, bw := range r.badWords.words {
+		normalizedBadWord := NormalizeModerationText(bw.Text, bw.Language)
+		if normalizedBadWord != "" && strings.Contains(normalizedText, normalizedBadWord) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Room) recordChat(payload ChatPayload) {
+	r.chatHistory = append(r.chatHistory, payload)
+	if len(r.chatHistory) > 100 {
+		r.chatHistory = append([]ChatPayload(nil), r.chatHistory[len(r.chatHistory)-100:]...)
 	}
 }
 

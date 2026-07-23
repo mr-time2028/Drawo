@@ -19,20 +19,51 @@ import (
 type mockAdminSvc struct {
 	mock.Mock
 }
+
 func (m *mockAdminSvc) UploadSong(ctx context.Context, t string, st domain.SongType, r io.Reader, s int64) (*domain.Song, error) {
-	args := m.Called(ctx, t, st, r, s); if args.Get(0) == nil { return nil, args.Error(1) }; return args.Get(0).(*domain.Song), args.Error(1)
+	args := m.Called(ctx, t, st, r, s)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Song), args.Error(1)
 }
 func (m *mockAdminSvc) ListSongs(ctx context.Context, st domain.SongType) ([]domain.Song, error) {
-	args := m.Called(ctx, st); return args.Get(0).([]domain.Song), args.Error(1)
+	args := m.Called(ctx, st)
+	return args.Get(0).([]domain.Song), args.Error(1)
 }
-func (m *mockAdminSvc) ToggleSong(ctx context.Context, id string, a bool) error { return m.Called(ctx, id, a).Error(0) }
-func (m *mockAdminSvc) DeleteSong(ctx context.Context, id string) error { return m.Called(ctx, id).Error(0) }
+func (m *mockAdminSvc) ToggleSong(ctx context.Context, id string, a bool) error {
+	return m.Called(ctx, id, a).Error(0)
+}
+func (m *mockAdminSvc) DeleteSong(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
 func (m *mockAdminSvc) SearchUsers(ctx context.Context, q string) ([]domain.UserWithProfile, error) {
-	args := m.Called(ctx, q); return args.Get(0).([]domain.UserWithProfile), args.Error(1)
+	args := m.Called(ctx, q)
+	return args.Get(0).([]domain.UserWithProfile), args.Error(1)
 }
-func (m *mockAdminSvc) BanUser(ctx context.Context, id string) error { return m.Called(ctx, id).Error(0) }
-func (m *mockAdminSvc) UnbanUser(ctx context.Context, id string) error { return m.Called(ctx, id).Error(0) }
-func (m *mockAdminSvc) UpdateGlobalSetting(ctx context.Context, k, v string) error { return m.Called(ctx, k, v).Error(0) }
+func (m *mockAdminSvc) BanUser(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
+func (m *mockAdminSvc) UnbanUser(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
+func (m *mockAdminSvc) UpdateGlobalSetting(ctx context.Context, k, v string) error {
+	return m.Called(ctx, k, v).Error(0)
+}
+func (m *mockAdminSvc) CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error) {
+	args := m.Called(ctx, text, language)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.BadWord), args.Error(1)
+}
+func (m *mockAdminSvc) ListBadWords(ctx context.Context, language string) ([]domain.BadWord, error) {
+	args := m.Called(ctx, language)
+	return args.Get(0).([]domain.BadWord), args.Error(1)
+}
+func (m *mockAdminSvc) DeleteBadWord(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
 
 func TestAdminController(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -48,14 +79,21 @@ func TestAdminController(t *testing.T) {
 	router.POST("/users/:id/ban", ctrl.BanUser)
 	router.POST("/users/:id/unban", ctrl.UnbanUser)
 	router.PATCH("/settings/:key", ctrl.UpdateSetting)
+	router.POST("/bad-words", ctrl.CreateBadWord)
+	router.GET("/bad-words", ctrl.ListBadWords)
+	router.DELETE("/bad-words/:id", ctrl.DeleteBadWord)
 
 	t.Run("UploadSong", func(t *testing.T) {
 		svc.On("UploadSong", mock.Anything, "T", domain.SongTypeLanding, mock.Anything, mock.Anything).Return(&domain.Song{}, nil).Once()
-		body := &bytes.Buffer{}; mw := multipart.NewWriter(body)
-		part, _ := mw.CreateFormFile("song", "a.mp3"); part.Write([]byte("data")); mw.Close()
+		body := &bytes.Buffer{}
+		mw := multipart.NewWriter(body)
+		part, _ := mw.CreateFormFile("song", "a.mp3")
+		part.Write([]byte("data"))
+		mw.Close()
 		req, _ := http.NewRequest("POST", "/songs?title=T&type=landing", body)
 		req.Header.Set("Content-Type", mw.FormDataContentType())
-		resp := httptest.NewRecorder(); router.ServeHTTP(resp, req)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
 		assert.Equal(t, http.StatusCreated, resp.Code)
 	})
 
@@ -66,8 +104,8 @@ func TestAdminController(t *testing.T) {
 		router.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
-    
-    t.Run("ToggleSong", func(t *testing.T) {
+
+	t.Run("ToggleSong", func(t *testing.T) {
 		svc.On("ToggleSong", mock.Anything, "id", true).Return(nil).Once()
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("PATCH", "/songs/id/toggle", bytes.NewBufferString(`{"active":true}`))
@@ -82,4 +120,32 @@ func TestAdminController(t *testing.T) {
 		router.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
+}
+
+func TestAdminControllerBadWords(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := new(mockAdminSvc)
+	ctrl := NewAdminController(svc)
+	router := gin.New()
+	router.POST("/bad-words", ctrl.CreateBadWord)
+	router.GET("/bad-words", ctrl.ListBadWords)
+	router.DELETE("/bad-words/:id", ctrl.DeleteBadWord)
+
+	svc.On("CreateBadWord", mock.Anything, "bad", "en").Return(&domain.BadWord{ID: "b1", Text: "bad", Language: "en"}, nil).Once()
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/bad-words", bytes.NewBufferString(`{"text":"bad","language":"en"}`))
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	svc.On("ListBadWords", mock.Anything, "en").Return([]domain.BadWord{{ID: "b1", Text: "bad", Language: "en"}}, nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/bad-words?language=en", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	svc.On("DeleteBadWord", mock.Anything, "b1").Return(nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("DELETE", "/bad-words/b1", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
 }

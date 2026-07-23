@@ -14,6 +14,7 @@ type ContentRepository interface {
 	GetTranslation(ctx context.Context, wordGroupID string, lang string) (*domain.Word, error)
 	InsertBadWord(ctx context.Context, bw *domain.BadWord) error
 	ListBadWords(ctx context.Context, lang string) ([]domain.BadWord, error)
+	DeleteBadWord(ctx context.Context, id string) error
 }
 
 type contentRepo struct {
@@ -67,4 +68,8 @@ func (r *contentRepo) ListBadWords(ctx context.Context, lang string) ([]domain.B
 	var list []domain.BadWord
 	err := r.db.WithContext(ctx).Where("language = ?", lang).Find(&list).Error
 	return list, err
+}
+
+func (r *contentRepo) DeleteBadWord(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&domain.BadWord{}).Error
 }

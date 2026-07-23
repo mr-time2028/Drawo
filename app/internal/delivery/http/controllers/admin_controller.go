@@ -176,3 +176,46 @@ func (ctrl *AdminController) UpdateSetting(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "setting updated"})
 }
+
+// CreateBadWordRequest defines an admin-managed prohibited word.
+type CreateBadWordRequest struct {
+	Text     string `json:"text" validate:"required"`
+	Language string `json:"language" validate:"required,oneof=en fa"`
+}
+
+// CreateBadWord adds a prohibited word to the moderation dictionary.
+func (ctrl *AdminController) CreateBadWord(c *gin.Context) {
+	var req CreateBadWordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(errors.New(errors.ErrBadRequest, "invalid body").Response())
+		return
+	}
+	badWord, err := ctrl.adminSvc.CreateBadWord(c.Request.Context(), req.Text, req.Language)
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusCreated, badWord)
+}
+
+// ListBadWords returns the prohibited word list for a language.
+func (ctrl *AdminController) ListBadWords(c *gin.Context) {
+	badWords, err := ctrl.adminSvc.ListBadWords(c.Request.Context(), c.Query("language"))
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, badWords)
+}
+
+// DeleteBadWord removes a prohibited word from the moderation dictionary.
+func (ctrl *AdminController) DeleteBadWord(c *gin.Context) {
+	if err := ctrl.adminSvc.DeleteBadWord(c.Request.Context(), c.Param("id")); err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "bad word deleted"})
+}

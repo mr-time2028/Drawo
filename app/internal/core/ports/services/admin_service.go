@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +29,11 @@ type AdminService interface {
 	BanUser(ctx context.Context, userID string) error
 	UnbanUser(ctx context.Context, userID string) error
 
+	// Bad words
+	CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error)
+	ListBadWords(ctx context.Context, language string) ([]domain.BadWord, error)
+	DeleteBadWord(ctx context.Context, id string) error
+
 	// Settings
 	UpdateGlobalSetting(ctx context.Context, key, value string) error
 }
@@ -35,6 +41,7 @@ type AdminService interface {
 type adminService struct {
 	cfg         config.Config
 	adminRepo   repositories.AdminRepository
+	contentRepo repositories.ContentRepository
 	userRepo    repositories.UserRepository
 	profileRepo repositories.ProfileRepository
 	sessionRepo repositories.SessionRepository
@@ -49,10 +56,16 @@ func NewAdminService(
 	profileRepo repositories.ProfileRepository,
 	sessionRepo repositories.SessionRepository,
 	storage repositories.FileStorage,
+	contentRepos ...repositories.ContentRepository,
 ) AdminService {
+	var contentRepo repositories.ContentRepository
+	if len(contentRepos) > 0 {
+		contentRepo = contentRepos[0]
+	}
 	return &adminService{
 		cfg:         cfg,
 		adminRepo:   adminRepo,
+		contentRepo: contentRepo,
 		userRepo:    userRepo,
 		profileRepo: profileRepo,
 		sessionRepo: sessionRepo,
@@ -149,6 +162,50 @@ func (s *adminService) UnbanUser(ctx context.Context, userID string) error {
 	}
 	user.IsActive = true
 	return s.userRepo.Update(user)
+}
+
+func (s *adminService) CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error) {
+	if s.contentRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	text = strings.TrimSpace(text)
+	language = strings.ToLower(strings.TrimSpace(language))
+	if text == "" {
+		return nil, errors.New(errors.ErrBadRequest, "bad word text is required")
+	}
+	if language != "en" && language != "fa" {
+		return nil, errors.New(errors.ErrBadRequest, "language must be en or fa")
+	}
+	badWord := &domain.BadWord{ID: uuid.New().String(), Text: text, Language: language, CreatedAt: time.Now()}
+	if err := s.contentRepo.InsertBadWord(ctx, badWord); err != nil {
+		return nil, errors.New(errors.ErrConflict, "bad word already exists or could not be saved")
+	}
+	return badWord, nil
+}
+
+func (s *adminService) ListBadWords(ctx context.Context, language string) ([]domain.BadWord, error) {
+	if s.contentRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	language = strings.ToLower(strings.TrimSpace(language))
+	if language == "" {
+		language = "fa"
+	}
+	if language != "en" && language != "fa" {
+		return nil, errors.New(errors.ErrBadRequest, "language must be en or fa")
+	}
+	return s.contentRepo.ListBadWords(ctx, language)
+}
+
+func (s *adminService) DeleteBadWord(ctx context.Context, id string) error {
+	if s.contentRepo == nil {
+		return errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New(errors.ErrBadRequest, "bad word id is required")
+	}
+	return s.contentRepo.DeleteBadWord(ctx, id)
 }
 
 func (s *adminService) UpdateGlobalSetting(ctx context.Context, key, value string) error {

@@ -76,6 +76,11 @@ func Register(router *gin.Engine, container *di.Container) {
 			admin.POST("/users/:id/ban", adminCtrl.BanUser)
 			admin.POST("/users/:id/unban", adminCtrl.UnbanUser)
 
+			// Bad word management
+			admin.POST("/bad-words", adminCtrl.CreateBadWord)
+			admin.GET("/bad-words", adminCtrl.ListBadWords)
+			admin.DELETE("/bad-words/:id", adminCtrl.DeleteBadWord)
+
 			// Settings
 			admin.PATCH("/settings/:key", adminCtrl.UpdateSetting)
 		}
