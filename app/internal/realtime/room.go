@@ -9,6 +9,7 @@ import (
 
 	"drawo/internal/core/domain"
 	"drawo/internal/core/ports/repositories"
+	apperrors "drawo/pkg/errors"
 )
 
 const (
@@ -142,7 +143,7 @@ func (r *Room) handleEvent(e *RoomEvent) bool {
 				r.broadcast(e, "")
 			}
 		} else {
-			r.sendError(e.Client, "draw_not_allowed", "drawing is not active")
+			r.sendError(e.Client, apperrors.WSErrDrawNotAllowed, "drawing is not active")
 		}
 	case EventChat:
 		r.handleChat(e)
@@ -158,17 +159,17 @@ func (r *Room) handleEvent(e *RoomEvent) bool {
 
 func (r *Room) applyDrawingEvent(e *RoomEvent) (json.RawMessage, bool) {
 	if !r.canClientDraw(e.Client) {
-		r.sendError(e.Client, "draw_forbidden", "only the current drawer can draw")
+		r.sendError(e.Client, apperrors.WSErrDrawForbidden, "only the current drawer can draw")
 		return nil, false
 	}
 
 	op, err := ValidateDrawingPayload(e.Payload)
 	if err != nil {
-		r.sendError(e.Client, "invalid_draw", err.Error())
+		r.sendError(e.Client, apperrors.WSErrInvalidDraw, err.Error())
 		return nil, false
 	}
 	if err := r.allowDrawingOperation(e.Client.ID, op); err != nil {
-		r.sendError(e.Client, "draw_rate_limited", err.Error())
+		r.sendError(e.Client, apperrors.WSErrDrawRateLimited, err.Error())
 		return nil, false
 	}
 
@@ -297,8 +298,8 @@ func (r *Room) allowDrawingOperation(clientID string, op DrawOperation) error {
 	return nil
 }
 
-func (r *Room) sendError(client *Client, code, message string) {
-	r.sendSystem(client, EventError, ErrorPayload{Code: code, Message: message})
+func (r *Room) sendError(client *Client, code apperrors.WSErrorCode, message string) {
+	r.sendSystem(client, EventError, ErrorPayload{Code: code.String(), Message: message})
 }
 
 func (r *Room) broadcast(e *RoomEvent, excludeClientID string) {
@@ -376,7 +377,7 @@ func (r *Room) handleJoin(client *Client) {
 		r.playerOrder = append(r.playerOrder, client.UserID)
 	} else {
 		if player.Abandoned {
-			r.sendError(client, "reconnect_expired", "reconnect window expired")
+			r.sendError(client, apperrors.WSErrReconnectExpired, "reconnect window expired")
 			return
 		}
 		isReconnect = !player.IsOnline
@@ -441,26 +442,26 @@ func (r *Room) handleChat(e *RoomEvent) {
 		return
 	}
 	if e.Client.UserID == r.state.CurrentDrawerID {
-		r.sendError(e.Client, "drawer_chat_blocked", "drawer cannot chat during drawing")
+		r.sendError(e.Client, apperrors.WSErrDrawerChatBlocked, "drawer cannot chat during drawing")
 		return
 	}
 	var payload ChatPayload
 	if err := json.Unmarshal(e.Payload, &payload); err != nil || strings.TrimSpace(payload.Text) == "" {
-		r.sendError(e.Client, "invalid_chat", "chat text is required")
+		r.sendError(e.Client, apperrors.WSErrInvalidChat, "chat text is required")
 		return
 	}
 	if !r.allowChat(e.Client.ID) {
-		r.sendError(e.Client, "chat_rate_limited", "too many chat messages")
+		r.sendError(e.Client, apperrors.WSErrChatRateLimited, "too many chat messages")
 		return
 	}
 	if r.containsBadWord(payload.Text) {
-		r.sendError(e.Client, "bad_word", "message contains prohibited words")
+		r.sendError(e.Client, apperrors.WSErrBadWord, "message contains prohibited words")
 		r.reputation.add(e.Client.UserID, -20, "chat_bad_word")
 		return
 	}
 	player := r.players[e.Client.UserID]
 	if player != nil && player.GuessedWord {
-		r.sendError(e.Client, "already_guessed", "you already guessed this word")
+		r.sendError(e.Client, apperrors.WSErrAlreadyGuessed, "you already guessed this word")
 		return
 	}
 	if r.currentWord != nil && NormalizeGuess(payload.Text, r.state.Language) == NormalizeGuess(r.currentWord.Text, r.state.Language) {
@@ -554,30 +555,30 @@ func (r *Room) handleGameEvent(e *RoomEvent) {
 		Event string `json:"event"`
 	}
 	if err := json.Unmarshal(e.Payload, &base); err != nil {
-		r.sendError(e.Client, "invalid_game_event", "invalid game event")
+		r.sendError(e.Client, apperrors.WSErrInvalidGameEvent, "invalid game event")
 		return
 	}
 	switch base.Event {
 	case "choose_word":
 		var payload ChooseWordPayload
 		if err := json.Unmarshal(e.Payload, &payload); err != nil {
-			r.sendError(e.Client, "invalid_game_event", "invalid word choice")
+			r.sendError(e.Client, apperrors.WSErrInvalidGameEvent, "invalid word choice")
 			return
 		}
 		if r.gameState != GameStateWordSelection || e.Client.UserID != r.state.CurrentDrawerID {
-			r.sendError(e.Client, "word_choice_forbidden", "only the current drawer can choose a word")
+			r.sendError(e.Client, apperrors.WSErrWordChoiceForbidden, "only the current drawer can choose a word")
 			return
 		}
 		r.chooseWord(payload.GroupID)
 	case "report":
 		var payload ReportPayload
 		if err := json.Unmarshal(e.Payload, &payload); err != nil {
-			r.sendError(e.Client, "invalid_report", "invalid report payload")
+			r.sendError(e.Client, apperrors.WSErrInvalidReport, "invalid report payload")
 			return
 		}
 		r.handleReportEvent(e.Client, payload)
 	default:
-		r.sendError(e.Client, "unsupported_game_event", "unsupported game event")
+		r.sendError(e.Client, apperrors.WSErrUnsupportedGameEvent, "unsupported game event")
 	}
 }
 

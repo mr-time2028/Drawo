@@ -15,6 +15,7 @@ import (
 
 	"drawo/config"
 	"drawo/internal/core/ports/repositories"
+	apperrors "drawo/pkg/errors"
 )
 
 const (
@@ -63,7 +64,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	authCtx, err := h.readAuth(r.Context(), conn)
 	if err != nil {
-		writeCloseError(conn, "auth_failed", err.Error(), websocket.ClosePolicyViolation)
+		writeCloseError(conn, apperrors.WSErrAuthFailed, err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
 
@@ -78,17 +79,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !h.enqueue(client, EventAuthOK, map[string]any{"user_id": userID, "session_id": sessionID, "expires_at": accessExpiresAt.Unix()}) {
-		writeCloseError(conn, "send_failed", "client send queue unavailable", websocket.CloseInternalServerErr)
+		writeCloseError(conn, apperrors.WSErrSendFailed, "client send queue unavailable", websocket.CloseInternalServerErr)
 		return
 	}
 
-	joinPayload, err := h.readJoin(r.Context(), conn, client)
+	joinPayload, err := h.readJoin(conn)
 	if err != nil {
-		writeCloseError(conn, "join_failed", err.Error(), websocket.ClosePolicyViolation)
+		writeCloseError(conn, apperrors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
 	if _, err := h.hub.JoinByRequest(r.Context(), joinPayload, client); err != nil {
-		writeCloseError(conn, "join_failed", err.Error(), websocket.ClosePolicyViolation)
+		writeCloseError(conn, apperrors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
 
@@ -118,7 +119,7 @@ func (h *Handler) readAuth(ctx context.Context, conn *websocket.Conn) (*AuthCont
 	return h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)
 }
 
-func (h *Handler) readJoin(ctx context.Context, conn *websocket.Conn, client *Client) (JoinPayload, error) {
+func (h *Handler) readJoin(conn *websocket.Conn) (JoinPayload, error) {
 	_ = conn.SetReadDeadline(time.Now().Add(joinDeadline))
 	env, err := readEnvelope(conn)
 	if err != nil {
@@ -188,23 +189,23 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 		}
 		messagesInWindow++
 		if messagesInWindow > maxMessagesPerSecond {
-			h.enqueueError(client, "rate_limited", "too many websocket messages")
+			h.enqueueError(client, apperrors.WSErrRateLimited, "too many websocket messages")
 			return
 		}
 
 		if !h.authenticator.SessionActive(ctx, authCtx) {
-			h.enqueueError(client, "session_revoked", "session no longer active")
+			h.enqueueError(client, apperrors.WSErrSessionRevoked, "session no longer active")
 			return
 		}
 
 		if env.Type == EventAuth {
 			if !authCtx.AccessValid(now) {
-				h.enqueueError(client, "auth_expired", "websocket access token expired; reconnect with a fresh access token")
+				h.enqueueError(client, apperrors.WSErrAuthExpired, "websocket access token expired; reconnect with a fresh access token")
 				return
 			}
 			if err := h.reauthenticate(ctx, client, authCtx, env); err != nil {
 				badMessages++
-				h.enqueueError(client, "auth_failed", err.Error())
+				h.enqueueError(client, apperrors.WSErrAuthFailed, err.Error())
 				if badMessages >= maxConsecutiveBadMessages {
 					return
 				}
@@ -215,13 +216,13 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 		}
 
 		if !authCtx.AccessValid(now) {
-			h.enqueueError(client, "auth_expired", "websocket access token expired; reconnect with a fresh access token")
+			h.enqueueError(client, apperrors.WSErrAuthExpired, "websocket access token expired; reconnect with a fresh access token")
 			return
 		}
 
 		if err := validateClientEvent(env); err != nil {
 			badMessages++
-			h.enqueueError(client, "bad_message", err.Error())
+			h.enqueueError(client, apperrors.WSErrBadMessage, err.Error())
 			if badMessages >= maxConsecutiveBadMessages {
 				return
 			}
@@ -240,7 +241,7 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 			Seq:       env.Seq,
 			Timestamp: now,
 		}); err != nil {
-			h.enqueueError(client, "room_error", err.Error())
+			h.enqueueError(client, apperrors.WSErrRoomError, err.Error())
 			return
 		}
 	}
@@ -320,7 +321,7 @@ func (h *Handler) writePump(ctx context.Context, client *Client, authCtx *AuthCo
 func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCtx *AuthContext, lastAuthRequired *time.Time) bool {
 	now := time.Now()
 	if !h.authenticator.SessionActive(ctx, authCtx) {
-		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: "session_revoked", Message: "session no longer active"})
+		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: apperrors.WSErrSessionRevoked.String(), Message: "session no longer active"})
 		if client.RoomID != "" {
 			h.hub.LeaveRoom(client.RoomID, client)
 		}
@@ -329,7 +330,7 @@ func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCt
 
 	accessExpiresAt := authCtx.AccessExpiresAtValue()
 	if !authCtx.AccessValid(now) {
-		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: "auth_expired", Message: "websocket access token expired; reconnect with a fresh access token"})
+		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: apperrors.WSErrAuthExpired.String(), Message: "websocket access token expired; reconnect with a fresh access token"})
 		if client.RoomID != "" {
 			h.hub.LeaveRoom(client.RoomID, client)
 		}
@@ -406,12 +407,12 @@ func (h *Handler) enqueue(client *Client, eventType EventType, payload any) bool
 	return safeSend(client, data)
 }
 
-func (h *Handler) enqueueError(client *Client, code, message string) bool {
-	return h.enqueue(client, EventError, ErrorPayload{Code: code, Message: message})
+func (h *Handler) enqueueError(client *Client, code apperrors.WSErrorCode, message string) bool {
+	return h.enqueue(client, EventError, ErrorPayload{Code: code.String(), Message: message})
 }
 
-func writeCloseError(conn *websocket.Conn, code, message string, closeCode int) {
-	payload, _ := json.Marshal(ErrorPayload{Code: code, Message: message})
+func writeCloseError(conn *websocket.Conn, code apperrors.WSErrorCode, message string, closeCode int) {
+	payload, _ := json.Marshal(ErrorPayload{Code: code.String(), Message: message})
 	data, _ := json.Marshal(MessageEnvelope{Type: EventError, Payload: payload, Timestamp: time.Now().Unix()})
 	_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 	_ = conn.WriteMessage(websocket.TextMessage, data)
