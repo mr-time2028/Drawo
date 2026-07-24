@@ -142,3 +142,41 @@ func TestAbandoningActiveGameDecreasesReputation(t *testing.T) {
 	assert.Less(t, profile.ReputationScore, int64(10000))
 	assert.True(t, room.players[drawer.UserID].Abandoned)
 }
+
+func TestSameUserSecondSocketReplacesOldSocket(t *testing.T) {
+	room := NewRoom(&domain.Room{ID: "dup-room", State: domain.RoomStateLobby}, func(string, string) {}, nil, nil, nil, nil)
+	first := &Client{ID: "first", UserID: "u1", Send: make(chan []byte, 10), Done: make(chan struct{})}
+	second := &Client{ID: "second", UserID: "u1", Send: make(chan []byte, 10), Done: make(chan struct{})}
+
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: first, Timestamp: time.Now()})
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: second, Timestamp: time.Now()})
+
+	_, firstStillActive := room.clients[first.ID]
+	_, secondActive := room.clients[second.ID]
+	assert.False(t, firstStillActive)
+	assert.True(t, secondActive)
+	assert.Equal(t, second.ID, room.players["u1"].ClientID)
+	select {
+	case <-first.Done:
+	default:
+		t.Fatal("old socket should be closed/replaced")
+	}
+}
+
+func TestPrivateGameDoesNotApplyPositiveReputationRewards(t *testing.T) {
+	profiles := &fakeProfileRepo{profiles: map[string]*domain.Profile{
+		"p1": {UserID: "p1", ReputationScore: 10000},
+		"p2": {UserID: "p2", ReputationScore: 10000},
+	}}
+	room := NewRoom(&domain.Room{ID: "private-room", Type: domain.RoomTypePrivate, State: domain.RoomStatePlaying, Language: "en", MaxRounds: 1}, func(string, string) {}, nil, profiles, nil, nil)
+	p1 := &Client{ID: "c1", UserID: "p1", Send: make(chan []byte, 10), Done: make(chan struct{})}
+	p2 := &Client{ID: "c2", UserID: "p2", Send: make(chan []byte, 10), Done: make(chan struct{})}
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: p1, Timestamp: time.Now()})
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: p2, Timestamp: time.Now()})
+	room.endGame()
+
+	profile1, _ := profiles.GetByUserID("p1")
+	profile2, _ := profiles.GetByUserID("p2")
+	assert.Equal(t, int64(10000), profile1.ReputationScore)
+	assert.Equal(t, int64(10000), profile2.ReputationScore)
+}

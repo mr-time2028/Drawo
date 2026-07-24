@@ -76,6 +76,14 @@ func Register(router *gin.Engine, container *di.Container) {
 			admin.POST("/users/:id/ban", adminCtrl.BanUser)
 			admin.POST("/users/:id/unban", adminCtrl.UnbanUser)
 
+			// Dictionary management
+			admin.POST("/categories", adminCtrl.CreateCategory)
+			admin.GET("/categories", adminCtrl.ListCategories)
+			admin.DELETE("/categories/:id", adminCtrl.DeleteCategory)
+			admin.POST("/words", adminCtrl.CreateWord)
+			admin.GET("/words", adminCtrl.ListWords)
+			admin.DELETE("/words/:id", adminCtrl.DeleteWord)
+
 			// Bad word management
 			admin.POST("/bad-words", adminCtrl.CreateBadWord)
 			admin.GET("/bad-words", adminCtrl.ListBadWords)

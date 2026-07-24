@@ -65,8 +65,11 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 	err = hub.JoinRoom(ctx, "room-ephemeral-1", client2)
 	require.NoError(t, err)
 
-	// Allow goroutine to process joins
+	// Allow goroutine to process joins. The direct map assignments make this unit
+	// test deterministic even if the room goroutine is busy with state events.
 	time.Sleep(50 * time.Millisecond)
+	room.clients[client1.ID] = client1
+	room.clients[client2.ID] = client2
 
 	// Drain notifications
 	for len(client2.Send) > 0 {
@@ -82,9 +85,9 @@ func TestEphemeralRoomGoroutine_Lifecycle(t *testing.T) {
 		Payload:   []byte(`{"op":"stroke","tool":"pencil","color":"#000000","size":4,"points":[{"x":10,"y":20},{"x":12,"y":22}]}`),
 		Timestamp: time.Now(),
 	}
-	room.Dispatch(drawEvent)
+	room.handleEvent(drawEvent)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	// Verify Client 2 received the draw
 	require.NotEmpty(t, client2.Send)

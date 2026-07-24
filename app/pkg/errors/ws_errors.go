@@ -1,5 +1,7 @@
 package errors
 
+import "drawo/pkg/i18n"
+
 // WSErrorCode is the stable machine-readable error code used inside WebSocket
 // error frames. Keep these values stable because frontend code switches on them.
 type WSErrorCode string
@@ -93,4 +95,20 @@ func WSDefaultMessage(code WSErrorCode) string {
 	default:
 		return "websocket error"
 	}
+}
+
+// WSMessageKey returns the i18n key for a WebSocket error code.
+func WSMessageKey(code WSErrorCode) string {
+	return "ws_errors." + code.String()
+}
+
+// WSTranslatedMessage returns a localized WebSocket error message. If i18n is
+// not initialized or the key is missing, it falls back to the English default.
+func WSTranslatedMessage(lang string, code WSErrorCode) string {
+	key := WSMessageKey(code)
+	translated := i18n.T(lang, key)
+	if translated == key || translated == "" {
+		return WSDefaultMessage(code)
+	}
+	return translated
 }

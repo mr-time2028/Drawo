@@ -16,17 +16,30 @@ type reputationEvent struct {
 	Reason string
 }
 
+const autoBanReputationThreshold = int64(3000)
+
 type reputationLedger struct {
 	profileRepo    repositories.ProfileRepository
 	reputationRepo repositories.ReputationRepository
+	userRepo       repositories.UserRepository
+	sessionRepo    repositories.SessionRepository
 	roomID         string
 	round          int
 	events         []reputationEvent
 	applied        map[string]int64
 }
 
-func newReputationLedger(profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, roomID string) *reputationLedger {
-	return &reputationLedger{profileRepo: profileRepo, reputationRepo: reputationRepo, roomID: roomID, applied: make(map[string]int64)}
+func newReputationLedger(profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, roomID string, extraRepos ...interface{}) *reputationLedger {
+	ledger := &reputationLedger{profileRepo: profileRepo, reputationRepo: reputationRepo, roomID: roomID, applied: make(map[string]int64)}
+	for _, repo := range extraRepos {
+		switch typed := repo.(type) {
+		case repositories.UserRepository:
+			ledger.userRepo = typed
+		case repositories.SessionRepository:
+			ledger.sessionRepo = typed
+		}
+	}
+	return ledger
 }
 
 func (l *reputationLedger) setContext(roomID string, round int) {
@@ -84,6 +97,26 @@ func (l *reputationLedger) flush() {
 			profile.ReputationScore = 0
 		}
 		_ = l.profileRepo.Update(profile)
+		if profile.ReputationScore < autoBanReputationThreshold {
+			l.autoBan(profile.UserID)
+		}
 	}
 	l.events = nil
+}
+
+func (l *reputationLedger) autoBan(userID string) {
+	if l.userRepo != nil {
+		if user, err := l.userRepo.GetByID(userID); err == nil && user != nil && user.IsActive {
+			now := time.Now()
+			user.IsActive = false
+			user.Status = domain.AccountStatusBanned
+			user.BanCount++
+			user.BannedAt = &now
+			user.UpdatedAt = now
+			_ = l.userRepo.Update(user)
+		}
+	}
+	if l.sessionRepo != nil {
+		_ = l.sessionRepo.DeleteAllForUser(context.Background(), userID)
+	}
 }

@@ -83,6 +83,7 @@ func (s *authService) Register(ctx context.Context, username, password string) (
 		Username:     username,
 		PasswordHash: hash,
 		IsActive:     true,
+		Status:       domain.AccountStatusActive,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -105,6 +106,25 @@ func (s *authService) Register(ctx context.Context, username, password string) (
 	}
 
 	return user, nil
+}
+
+func accountStatusMessage(lang string, user *domain.User) (string, string) {
+	if user == nil {
+		return i18n.T(lang, "errors.account_unavailable"), "account_unavailable"
+	}
+	switch user.Status {
+	case domain.AccountStatusBanned:
+		return i18n.T(lang, "errors.account_banned"), "account_banned"
+	case domain.AccountStatusSuspended:
+		return i18n.T(lang, "errors.account_suspended"), "account_suspended"
+	case domain.AccountStatusDeleted:
+		return i18n.T(lang, "errors.account_deleted"), "account_deleted"
+	default:
+		if !user.IsActive {
+			return i18n.T(lang, "errors.account_inactive"), "account_inactive"
+		}
+		return i18n.T(lang, "errors.account_unavailable"), "account_unavailable"
+	}
 }
 
 // Login verifies credentials and establishes a session (Single Device Policy enforced).
@@ -130,8 +150,8 @@ func (s *authService) Login(ctx context.Context, username, password, ip, userAge
 		return nil, errors.New(errors.ErrUnauthorized, "invalid username or password")
 	}
 
-	// 4. CHECK BAN STATUS: If the user is deactivated, prevent login and show localized message.
-	if !user.IsActive {
+	// 4. CHECK ACCOUNT STATUS: If the user is banned/suspended/deactivated, prevent login and show localized message.
+	if !user.IsActive || (user.Status != "" && user.Status != domain.AccountStatusActive) {
 		// Fetch profile to see user's language preference
 		profile, _ := s.profileRepo.GetByUserID(user.ID)
 		lang := "fa" // Default to Persian as requested
@@ -139,9 +159,8 @@ func (s *authService) Login(ctx context.Context, username, password, ip, userAge
 			lang = profile.Locale
 		}
 
-		// Use the i18n package to get the "account_banned" message
-		msg := i18n.T(lang, "errors.account_banned")
-		return nil, errors.New(errors.ErrForbidden, msg)
+		msg, code := accountStatusMessage(lang, user)
+		return nil, errors.New(errors.ErrForbidden, msg).WithCode(code)
 	}
 
 	// 5. SUCCESS: Create Session and Tokens

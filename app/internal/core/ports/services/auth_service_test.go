@@ -14,7 +14,7 @@ import (
 	"drawo/internal/core/domain"
 	"drawo/internal/core/ports/repositories"
 	"drawo/internal/infrastructure/cache"
-    "drawo/pkg/i18n"
+	"drawo/pkg/i18n"
 )
 
 func setupAuthDeps(t *testing.T) (config.Config, repositories.UserRepository, repositories.ProfileRepository, repositories.SessionRepository, RateLimiter) {
@@ -22,7 +22,7 @@ func setupAuthDeps(t *testing.T) (config.Config, repositories.UserRepository, re
 	cfg.App.SecretKey = "test-secret-key-that-is-long-enough"
 	cfg.Auth.AccessTokenExpiry = 1 * time.Hour
 	cfg.Auth.RefreshTokenExpiry = 24 * time.Hour
-    cfg.Auth.MaxLoginAttempts = 100 // High enough to avoid failures in loop tests
+	cfg.Auth.MaxLoginAttempts = 100 // High enough to avoid failures in loop tests
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -37,9 +37,9 @@ func setupAuthDeps(t *testing.T) (config.Config, repositories.UserRepository, re
 
 	sessionRepo := repositories.NewSessionRepo(cacheClient)
 	limiter := NewRateLimiter(cacheClient)
-    
-    // Init i18n for ban messages
-    _ = i18n.Init("../../../../locales", "fa")
+
+	// Init i18n for ban messages
+	_ = i18n.Init("../../../../locales", "fa")
 
 	return cfg, userRepo, profileRepo, sessionRepo, limiter
 }
@@ -65,7 +65,7 @@ func TestAuthService_FullLifecycle(t *testing.T) {
 	// 3. REFRESH
 	newTokens, err := svc.Refresh(ctx, tokens.RefreshToken)
 	require.NoError(t, err)
-    assert.NotNil(t, newTokens)
+	assert.NotNil(t, newTokens)
 
 	// 4. REUSE DETECTION
 	_, err = svc.Refresh(ctx, tokens.RefreshToken)
@@ -75,7 +75,7 @@ func TestAuthService_FullLifecycle(t *testing.T) {
 	// 5. SINGLE DEVICE POLICY
 	_, _ = svc.Login(ctx, username, password, "1.1.1.1", "Dev1")
 	tokens3, err := svc.Login(ctx, username, password, "2.2.2.2", "Dev2")
-    require.NoError(t, err)
+	require.NoError(t, err)
 
 	// 6. LOGOUT
 	err = svc.Logout(ctx, tokens3.AccessToken)
@@ -96,39 +96,71 @@ func TestAuthService_Failures(t *testing.T) {
 	_, err = svc.Login(ctx, "ghost", "pass", "", "")
 	assert.Error(t, err)
 
-    // Login Fail (Wrong Password)
-    svc.Register(ctx, "wrong", "pass")
-    _, err = svc.Login(ctx, "wrong", "fail", "", "")
-    assert.Error(t, err)
+	// Login Fail (Wrong Password)
+	svc.Register(ctx, "wrong", "pass")
+	_, err = svc.Login(ctx, "wrong", "fail", "", "")
+	assert.Error(t, err)
 
 	// Refresh Fail (Invalid Token)
 	_, err = svc.Refresh(ctx, "invalid")
 	assert.Error(t, err)
-    
-    // Refresh Fail (Revoked Session)
-    user, _ := svc.Register(ctx, "hamid2", "pass")
-    tks, err := svc.Login(ctx, "hamid2", "pass", "", "")
-    require.NoError(t, err)
-    sessionRepo.DeleteAllForUser(ctx, user.ID)
-    _, err = svc.Refresh(ctx, tks.RefreshToken)
-    assert.Error(t, err)
+
+	// Refresh Fail (Revoked Session)
+	user, _ := svc.Register(ctx, "hamid2", "pass")
+	tks, err := svc.Login(ctx, "hamid2", "pass", "", "")
+	require.NoError(t, err)
+	sessionRepo.DeleteAllForUser(ctx, user.ID)
+	_, err = svc.Refresh(ctx, tks.RefreshToken)
+	assert.Error(t, err)
 }
 
-func TestAuthService_BanCheck(t *testing.T) {
-    cfg, userRepo, profileRepo, sessionRepo, limiter := setupAuthDeps(t)
+func TestAuthService_AccountStatusMessages(t *testing.T) {
+	cfg, userRepo, profileRepo, sessionRepo, limiter := setupAuthDeps(t)
 	svc := NewAuthService(cfg, userRepo, profileRepo, sessionRepo, limiter)
 	ctx := context.Background()
 
-    username := "banned_user"
-    user, err := svc.Register(ctx, username, "pass")
-    require.NoError(t, err)
-    
-    // Deactivate
-    user.IsActive = false
-    userRepo.Update(user)
+	t.Run("BannedPersian", func(t *testing.T) {
+		username := "banned_user"
+		user, err := svc.Register(ctx, username, "pass")
+		require.NoError(t, err)
+		user.IsActive = false
+		user.Status = domain.AccountStatusBanned
+		require.NoError(t, userRepo.Update(user))
 
-    _, err = svc.Login(ctx, username, "pass", "", "")
-    assert.Error(t, err)
-    // The localized message for banned is in fa.json
-    assert.Contains(t, err.Error(), "مسدود") 
+		_, err = svc.Login(ctx, username, "pass", "", "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "مسدود")
+	})
+
+	t.Run("SuspendedEnglish", func(t *testing.T) {
+		username := "suspended_user"
+		user, err := svc.Register(ctx, username, "pass")
+		require.NoError(t, err)
+		profile, err := profileRepo.GetByUserID(user.ID)
+		require.NoError(t, err)
+		profile.Locale = "en"
+		require.NoError(t, profileRepo.Update(profile))
+		user.Status = domain.AccountStatusSuspended
+		require.NoError(t, userRepo.Update(user))
+
+		_, err = svc.Login(ctx, username, "pass", "", "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "suspended")
+	})
+
+	t.Run("DeletedEnglish", func(t *testing.T) {
+		username := "deleted_user"
+		user, err := svc.Register(ctx, username, "pass")
+		require.NoError(t, err)
+		profile, err := profileRepo.GetByUserID(user.ID)
+		require.NoError(t, err)
+		profile.Locale = "en"
+		require.NoError(t, profileRepo.Update(profile))
+		user.Status = domain.AccountStatusDeleted
+		require.NoError(t, userRepo.Update(user))
+
+		_, err = svc.Login(ctx, username, "pass", "", "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "deleted")
+	})
 }

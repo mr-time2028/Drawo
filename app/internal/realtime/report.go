@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"drawo/internal/core/domain"
-	apperrors "drawo/pkg/errors"
+	"drawo/pkg/errors"
 )
 
 const (
@@ -43,30 +43,30 @@ type ReportEvidence struct {
 
 func (r *Room) handleReportEvent(client *Client, payload ReportPayload) {
 	if r.reportRepo == nil {
-		r.sendError(client, apperrors.WSErrReportsUnavailable, "reporting is not configured")
+		r.sendError(client, errors.WSErrReportsUnavailable, "reporting is not configured")
 		return
 	}
 	payload.ReportedUserID = strings.TrimSpace(payload.ReportedUserID)
 	payload.Details = strings.TrimSpace(payload.Details)
 	if len(payload.Details) > maxReportDetailsLength {
-		r.sendError(client, apperrors.WSErrInvalidReport, "report details are too long")
+		r.sendError(client, errors.WSErrInvalidReport, "report details are too long")
 		return
 	}
 	if payload.ReportedUserID == "" || r.players[payload.ReportedUserID] == nil {
-		r.sendError(client, apperrors.WSErrInvalidReport, "reported player is not in this room")
+		r.sendError(client, errors.WSErrInvalidReport, "reported player is not in this room")
 		return
 	}
 	if payload.ReportedUserID == client.UserID {
-		r.sendError(client, apperrors.WSErrInvalidReport, "you cannot report yourself")
+		r.sendError(client, errors.WSErrInvalidReport, "you cannot report yourself")
 		return
 	}
 	if !validReportReason(payload.Reason) {
-		r.sendError(client, apperrors.WSErrInvalidReport, "invalid report reason")
+		r.sendError(client, errors.WSErrInvalidReport, "invalid report reason")
 		return
 	}
 	key := fmt.Sprintf("%d:%s:%s:%s", r.state.CurrentRound, client.UserID, payload.ReportedUserID, payload.Reason)
 	if _, exists := r.reportKeys[key]; exists {
-		r.sendError(client, apperrors.WSErrDuplicateReport, "you already reported this player for this reason")
+		r.sendError(client, errors.WSErrDuplicateReport, "you already reported this player for this reason")
 		return
 	}
 	r.reportKeys[key] = struct{}{}
@@ -85,11 +85,11 @@ func (r *Room) handleReportEvent(client *Client, payload ReportPayload) {
 		CreatedAt:  time.Now(),
 	}
 	if err := r.reportRepo.InsertReport(context.Background(), report); err != nil {
-		r.sendError(client, apperrors.WSErrReportFailed, "could not store report")
+		r.sendError(client, errors.WSErrReportFailed, "could not store report")
 		return
 	}
 	r.applyAggregatedReportPenalty(payload.ReportedUserID, payload.Reason, client.UserID)
-	r.sendSystem(client, EventGame, map[string]any{"event": "report_submitted", "report_id": report.ID})
+	r.sendSystem(client, EventGame, ReportSubmittedPayload{Event: "report_submitted", ReportID: report.ID})
 }
 
 func (r *Room) buildReportEvidence(reporterID, reportedID string) ReportEvidence {

@@ -6,8 +6,9 @@
 //   - Keep HTTP concerns out of domain/application packages.
 //
 // Why not use the standard errors package everywhere?
-//   Sentinel errors make it easy for controllers to decide status codes without
-//   parsing strings. The application layer stays framework-agnostic.
+//
+//	Sentinel errors make it easy for controllers to decide status codes without
+//	parsing strings. The application layer stays framework-agnostic.
 package errors
 
 import (
@@ -32,12 +33,13 @@ var (
 
 // AppError pairs a sentinel error with a user-facing message and optional field.
 //
-// This is the only error type HTTP controllers should receive from 
+// This is the only error type HTTP controllers should receive from
 // Keeping the original sentinel error lets the controller map it to a status code,
 // while the message is safe to show to the user.
 type AppError struct {
 	Err     error
 	Field   string
+	Code    string
 	Message string
 }
 
@@ -61,6 +63,15 @@ func (e *AppError) WithField(field string) *AppError {
 	return e
 }
 
+// WithCode adds a stable machine-readable code to an AppError.
+//
+// The human-facing message can be translated, but the code should stay stable so
+// frontend code can branch on it without parsing text.
+func (e *AppError) WithCode(code string) *AppError {
+	e.Code = code
+	return e
+}
+
 // Response builds a Gin response from an AppError.
 func (e *AppError) Response() (int, gin.H) {
 	status := mapStatus(e.Err)
@@ -71,10 +82,18 @@ func (e *AppError) Response() (int, gin.H) {
 	}
 
 	if e.Field != "" {
-		return status, gin.H{"message": gin.H{e.Field: []string{e.Message}}}
+		body := gin.H{"message": gin.H{e.Field: []string{e.Message}}}
+		if e.Code != "" {
+			body["code"] = e.Code
+		}
+		return status, body
 	}
 
-	return status, gin.H{"message": e.Message}
+	body := gin.H{"message": e.Message}
+	if e.Code != "" {
+		body["code"] = e.Code
+	}
+	return status, body
 }
 
 // mapStatus converts sentinel errors to HTTP status codes.

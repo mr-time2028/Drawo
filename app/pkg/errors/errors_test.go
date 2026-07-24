@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAppError(t *testing.T) {
@@ -18,6 +18,9 @@ func TestAppError(t *testing.T) {
 
 	errField := err.WithField("id")
 	assert.Equal(t, "id", errField.Field)
+
+	errCode := err.WithCode("account_banned")
+	assert.Equal(t, "account_banned", errCode.Code)
 }
 
 func TestAppErrorResponse(t *testing.T) {
@@ -98,6 +101,13 @@ func TestAppErrorResponse(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAppErrorResponseWithCode(t *testing.T) {
+	status, body := New(ErrForbidden, "banned").WithCode("account_banned").Response()
+	assert.Equal(t, http.StatusForbidden, status)
+	assert.Equal(t, "banned", body["message"])
+	assert.Equal(t, "account_banned", body["code"])
 }
 
 func TestValidationError(t *testing.T) {

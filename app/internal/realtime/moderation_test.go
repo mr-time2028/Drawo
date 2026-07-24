@@ -18,7 +18,12 @@ func (f *fakeContentRepo) InsertCategory(ctx context.Context, cat *domain.Catego
 func (f *fakeContentRepo) ListCategories(ctx context.Context, lang string) ([]domain.Category, error) {
 	return nil, nil
 }
+func (f *fakeContentRepo) DeleteCategory(ctx context.Context, id string) error     { return nil }
 func (f *fakeContentRepo) InsertWord(ctx context.Context, word *domain.Word) error { return nil }
+func (f *fakeContentRepo) ListWords(ctx context.Context, categoryID string, lang string) ([]domain.Word, error) {
+	return nil, nil
+}
+func (f *fakeContentRepo) DeleteWord(ctx context.Context, id string) error { return nil }
 func (f *fakeContentRepo) GetRandomWordGroups(ctx context.Context, categoryID string, lang string, count int) ([]domain.Word, error) {
 	return nil, nil
 }

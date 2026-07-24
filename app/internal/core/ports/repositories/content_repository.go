@@ -9,7 +9,10 @@ import (
 type ContentRepository interface {
 	InsertCategory(ctx context.Context, cat *domain.Category) error
 	ListCategories(ctx context.Context, lang string) ([]domain.Category, error)
+	DeleteCategory(ctx context.Context, id string) error
 	InsertWord(ctx context.Context, word *domain.Word) error
+	ListWords(ctx context.Context, categoryID string, lang string) ([]domain.Word, error)
+	DeleteWord(ctx context.Context, id string) error
 	GetRandomWordGroups(ctx context.Context, categoryID string, lang string, count int) ([]domain.Word, error)
 	GetTranslation(ctx context.Context, wordGroupID string, lang string) (*domain.Word, error)
 	InsertBadWord(ctx context.Context, bw *domain.BadWord) error
@@ -72,4 +75,22 @@ func (r *contentRepo) ListBadWords(ctx context.Context, lang string) ([]domain.B
 
 func (r *contentRepo) DeleteBadWord(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&domain.BadWord{}).Error
+}
+
+func (r *contentRepo) DeleteCategory(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&domain.Category{}).Error
+}
+
+func (r *contentRepo) ListWords(ctx context.Context, categoryID string, lang string) ([]domain.Word, error) {
+	var list []domain.Word
+	query := r.db.WithContext(ctx).Where("language = ?", lang)
+	if categoryID != "" {
+		query = query.Where("category_id = ?", categoryID)
+	}
+	err := query.Order("created_at desc").Find(&list).Error
+	return list, err
+}
+
+func (r *contentRepo) DeleteWord(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&domain.Word{}).Error
 }

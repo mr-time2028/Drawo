@@ -3,7 +3,7 @@ package realtime
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,7 +15,7 @@ import (
 
 	"drawo/config"
 	"drawo/internal/core/ports/repositories"
-	apperrors "drawo/pkg/errors"
+	"drawo/pkg/errors"
 )
 
 const (
@@ -64,7 +64,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	authCtx, err := h.readAuth(r.Context(), conn)
 	if err != nil {
-		writeCloseError(conn, apperrors.WSErrAuthFailed, err.Error(), websocket.ClosePolicyViolation)
+		writeCloseError(conn, errors.WSErrAuthFailed, err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
 
@@ -78,18 +78,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Done:      make(chan struct{}),
 	}
 
-	if !h.enqueue(client, EventAuthOK, map[string]any{"user_id": userID, "session_id": sessionID, "expires_at": accessExpiresAt.Unix()}) {
-		writeCloseError(conn, apperrors.WSErrSendFailed, "client send queue unavailable", websocket.CloseInternalServerErr)
+	if !h.enqueue(client, EventAuthOK, AuthOKPayload{UserID: userID, SessionID: sessionID, ExpiresAt: accessExpiresAt.Unix()}) {
+		writeCloseError(conn, errors.WSErrSendFailed, "client send queue unavailable", websocket.CloseInternalServerErr)
 		return
 	}
 
 	joinPayload, err := h.readJoin(conn)
 	if err != nil {
-		writeCloseError(conn, apperrors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
+		writeCloseError(conn, errors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
 	if _, err := h.hub.JoinByRequest(r.Context(), joinPayload, client); err != nil {
-		writeCloseError(conn, apperrors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
+		writeCloseError(conn, errors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
 
@@ -107,14 +107,14 @@ func (h *Handler) readAuth(ctx context.Context, conn *websocket.Conn) (*AuthCont
 		return nil, err
 	}
 	if env.Type != EventAuth {
-		return nil, errors.New("first websocket message must be auth")
+		return nil, fmt.Errorf("first websocket message must be auth")
 	}
 	var payload AuthPayload
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
-		return nil, errors.New("invalid auth payload")
+		return nil, fmt.Errorf("invalid auth payload")
 	}
 	if strings.TrimSpace(payload.AccessToken) == "" {
-		return nil, errors.New("access token is required")
+		return nil, fmt.Errorf("access token is required")
 	}
 	return h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)
 }
@@ -126,7 +126,7 @@ func (h *Handler) readJoin(conn *websocket.Conn) (JoinPayload, error) {
 		return JoinPayload{}, err
 	}
 	if env.Type != EventJoin {
-		return JoinPayload{}, errors.New("second websocket message must be join")
+		return JoinPayload{}, fmt.Errorf("second websocket message must be join")
 	}
 	if len(env.Payload) == 0 {
 		// Empty join means: backend, please public-matchmake me.
@@ -134,7 +134,7 @@ func (h *Handler) readJoin(conn *websocket.Conn) (JoinPayload, error) {
 	}
 	var payload JoinPayload
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
-		return JoinPayload{}, errors.New("invalid join payload")
+		return JoinPayload{}, fmt.Errorf("invalid join payload")
 	}
 	payload.RoomID = strings.TrimSpace(payload.RoomID)
 	payload.InviteCode = strings.TrimSpace(payload.InviteCode)
@@ -142,10 +142,10 @@ func (h *Handler) readJoin(conn *websocket.Conn) (JoinPayload, error) {
 	payload.Language = strings.ToLower(strings.TrimSpace(payload.Language))
 	payload.CategoryID = strings.TrimSpace(payload.CategoryID)
 	if len(payload.RoomID) > 128 || len(payload.InviteCode) > 64 || len(payload.Language) > 8 || len(payload.CategoryID) > 128 {
-		return JoinPayload{}, errors.New("invalid join payload")
+		return JoinPayload{}, fmt.Errorf("invalid join payload")
 	}
 	if payload.Mode != "" && payload.Mode != "public" && payload.Mode != "private" && payload.Mode != "reconnect" {
-		return JoinPayload{}, errors.New("invalid join mode")
+		return JoinPayload{}, fmt.Errorf("invalid join mode")
 	}
 	return payload, nil
 }
@@ -189,23 +189,23 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 		}
 		messagesInWindow++
 		if messagesInWindow > maxMessagesPerSecond {
-			h.enqueueError(client, apperrors.WSErrRateLimited, "too many websocket messages")
+			h.enqueueError(client, errors.WSErrRateLimited, "too many websocket messages")
 			return
 		}
 
 		if !h.authenticator.SessionActive(ctx, authCtx) {
-			h.enqueueError(client, apperrors.WSErrSessionRevoked, "session no longer active")
+			h.enqueueError(client, errors.WSErrSessionRevoked, "session no longer active")
 			return
 		}
 
 		if env.Type == EventAuth {
 			if !authCtx.AccessValid(now) {
-				h.enqueueError(client, apperrors.WSErrAuthExpired, "websocket access token expired; reconnect with a fresh access token")
+				h.enqueueError(client, errors.WSErrAuthExpired, "websocket access token expired; reconnect with a fresh access token")
 				return
 			}
 			if err := h.reauthenticate(ctx, client, authCtx, env); err != nil {
 				badMessages++
-				h.enqueueError(client, apperrors.WSErrAuthFailed, err.Error())
+				h.enqueueError(client, errors.WSErrAuthFailed, err.Error())
 				if badMessages >= maxConsecutiveBadMessages {
 					return
 				}
@@ -216,13 +216,13 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 		}
 
 		if !authCtx.AccessValid(now) {
-			h.enqueueError(client, apperrors.WSErrAuthExpired, "websocket access token expired; reconnect with a fresh access token")
+			h.enqueueError(client, errors.WSErrAuthExpired, "websocket access token expired; reconnect with a fresh access token")
 			return
 		}
 
 		if err := validateClientEvent(env); err != nil {
 			badMessages++
-			h.enqueueError(client, apperrors.WSErrBadMessage, err.Error())
+			h.enqueueError(client, errors.WSErrBadMessage, err.Error())
 			if badMessages >= maxConsecutiveBadMessages {
 				return
 			}
@@ -241,7 +241,7 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 			Seq:       env.Seq,
 			Timestamp: now,
 		}); err != nil {
-			h.enqueueError(client, apperrors.WSErrRoomError, err.Error())
+			h.enqueueError(client, errors.WSErrRoomError, err.Error())
 			return
 		}
 	}
@@ -250,10 +250,10 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 func (h *Handler) reauthenticate(ctx context.Context, client *Client, authCtx *AuthContext, env *MessageEnvelope) error {
 	var payload AuthPayload
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
-		return errors.New("invalid auth payload")
+		return fmt.Errorf("invalid auth payload")
 	}
 	if strings.TrimSpace(payload.AccessToken) == "" {
-		return errors.New("access token is required")
+		return fmt.Errorf("access token is required")
 	}
 
 	next, err := h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)
@@ -263,17 +263,13 @@ func (h *Handler) reauthenticate(ctx context.Context, client *Client, authCtx *A
 	currentUserID, currentSessionID, _, _ := authCtx.Snapshot()
 	nextUserID, nextSessionID, _, nextExpiry := next.Snapshot()
 	if nextUserID != currentUserID || nextSessionID != currentSessionID {
-		return errors.New("re-auth token must belong to the same user and session")
+		return fmt.Errorf("re-auth token must belong to the same user and session")
 	}
 
 	authCtx.UpdateFrom(next)
-	returnBool := h.enqueue(client, EventAuthOK, map[string]any{
-		"user_id":    nextUserID,
-		"session_id": nextSessionID,
-		"expires_at": nextExpiry.Unix(),
-	})
+	returnBool := h.enqueue(client, EventAuthOK, AuthOKPayload{UserID: nextUserID, SessionID: nextSessionID, ExpiresAt: nextExpiry.Unix()})
 	if !returnBool {
-		return errors.New("client send queue unavailable")
+		return fmt.Errorf("client send queue unavailable")
 	}
 	return nil
 }
@@ -321,7 +317,7 @@ func (h *Handler) writePump(ctx context.Context, client *Client, authCtx *AuthCo
 func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCtx *AuthContext, lastAuthRequired *time.Time) bool {
 	now := time.Now()
 	if !h.authenticator.SessionActive(ctx, authCtx) {
-		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: apperrors.WSErrSessionRevoked.String(), Message: "session no longer active"})
+		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: errors.WSErrSessionRevoked.String(), Message: "session no longer active"})
 		if client.RoomID != "" {
 			h.hub.LeaveRoom(client.RoomID, client)
 		}
@@ -330,7 +326,7 @@ func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCt
 
 	accessExpiresAt := authCtx.AccessExpiresAtValue()
 	if !authCtx.AccessValid(now) {
-		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: apperrors.WSErrAuthExpired.String(), Message: "websocket access token expired; reconnect with a fresh access token"})
+		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: errors.WSErrAuthExpired.String(), Message: "websocket access token expired; reconnect with a fresh access token"})
 		if client.RoomID != "" {
 			h.hub.LeaveRoom(client.RoomID, client)
 		}
@@ -367,14 +363,14 @@ func readEnvelope(conn *websocket.Conn) (*MessageEnvelope, error) {
 		return nil, err
 	}
 	if messageType != websocket.TextMessage {
-		return nil, errors.New("only text JSON websocket frames are accepted")
+		return nil, fmt.Errorf("only text JSON websocket frames are accepted")
 	}
 	var env MessageEnvelope
 	if err := json.Unmarshal(data, &env); err != nil {
-		return nil, errors.New("invalid JSON envelope")
+		return nil, fmt.Errorf("invalid JSON envelope")
 	}
 	if env.Type == "" {
-		return nil, errors.New("message type is required")
+		return nil, fmt.Errorf("message type is required")
 	}
 	return &env, nil
 }
@@ -386,18 +382,18 @@ func validateClientEvent(env *MessageEnvelope) error {
 		return err
 	case EventChat, EventGame, EventClearCanvas:
 		if len(env.Payload) == 0 {
-			return errors.New("payload is required")
+			return fmt.Errorf("payload is required")
 		}
 		if !json.Valid(env.Payload) {
-			return errors.New("payload must be valid JSON")
+			return fmt.Errorf("payload must be valid JSON")
 		}
 		return nil
 	case EventLeave:
 		return nil
 	case EventAuth, EventJoin:
-		return errors.New("auth/join are only allowed during handshake")
+		return fmt.Errorf("auth/join are only allowed during handshake")
 	default:
-		return errors.New("unsupported websocket event type")
+		return fmt.Errorf("unsupported websocket event type")
 	}
 }
 
@@ -407,11 +403,11 @@ func (h *Handler) enqueue(client *Client, eventType EventType, payload any) bool
 	return safeSend(client, data)
 }
 
-func (h *Handler) enqueueError(client *Client, code apperrors.WSErrorCode, message string) bool {
+func (h *Handler) enqueueError(client *Client, code errors.WSErrorCode, message string) bool {
 	return h.enqueue(client, EventError, ErrorPayload{Code: code.String(), Message: message})
 }
 
-func writeCloseError(conn *websocket.Conn, code apperrors.WSErrorCode, message string, closeCode int) {
+func writeCloseError(conn *websocket.Conn, code errors.WSErrorCode, message string, closeCode int) {
 	payload, _ := json.Marshal(ErrorPayload{Code: code.String(), Message: message})
 	data, _ := json.Marshal(MessageEnvelope{Type: EventError, Payload: payload, Timestamp: time.Now().Unix()})
 	_ = conn.SetWriteDeadline(time.Now().Add(writeWait))

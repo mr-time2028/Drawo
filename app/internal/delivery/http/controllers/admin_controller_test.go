@@ -48,6 +48,35 @@ func (m *mockAdminSvc) UnbanUser(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)
 }
 
+func (m *mockAdminSvc) CreateCategory(ctx context.Context, name, language, groupID string) (*domain.Category, error) {
+	args := m.Called(ctx, name, language, groupID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Category), args.Error(1)
+}
+func (m *mockAdminSvc) ListCategories(ctx context.Context, language string) ([]domain.Category, error) {
+	args := m.Called(ctx, language)
+	return args.Get(0).([]domain.Category), args.Error(1)
+}
+func (m *mockAdminSvc) DeleteCategory(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
+func (m *mockAdminSvc) CreateWord(ctx context.Context, categoryID, groupID, text, language string, points int) (*domain.Word, error) {
+	args := m.Called(ctx, categoryID, groupID, text, language, points)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Word), args.Error(1)
+}
+func (m *mockAdminSvc) ListWords(ctx context.Context, categoryID, language string) ([]domain.Word, error) {
+	args := m.Called(ctx, categoryID, language)
+	return args.Get(0).([]domain.Word), args.Error(1)
+}
+func (m *mockAdminSvc) DeleteWord(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
+
 func (m *mockAdminSvc) ListReports(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error) {
 	args := m.Called(ctx, status, paging)
 	if args.Get(0) == nil {
@@ -204,6 +233,55 @@ func TestAdminControllerReports(t *testing.T) {
 	svc.On("RejectReport", mock.Anything, "r1", "admin1", "no").Return(nil).Once()
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("POST", "/reports/r1/reject", bytes.NewBufferString(`{"note":"no"}`))
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAdminControllerDictionary(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := new(mockAdminSvc)
+	ctrl := NewAdminController(svc)
+	router := gin.New()
+	router.POST("/categories", ctrl.CreateCategory)
+	router.GET("/categories", ctrl.ListCategories)
+	router.DELETE("/categories/:id", ctrl.DeleteCategory)
+	router.POST("/words", ctrl.CreateWord)
+	router.GET("/words", ctrl.ListWords)
+	router.DELETE("/words/:id", ctrl.DeleteWord)
+
+	svc.On("CreateCategory", mock.Anything, "Animals", "en", "cg1").Return(&domain.Category{ID: "c1", Name: "Animals", Language: "en", GroupID: "cg1"}, nil).Once()
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/categories", bytes.NewBufferString(`{"name":"Animals","language":"en","group_id":"cg1"}`))
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	svc.On("ListCategories", mock.Anything, "en").Return([]domain.Category{{ID: "c1"}}, nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/categories?language=en", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	svc.On("DeleteCategory", mock.Anything, "c1").Return(nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("DELETE", "/categories/c1", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	svc.On("CreateWord", mock.Anything, "c1", "wg1", "cat", "en", 1).Return(&domain.Word{ID: "w1"}, nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("POST", "/words", bytes.NewBufferString(`{"category_id":"c1","group_id":"wg1","text":"cat","language":"en","points":1}`))
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	svc.On("ListWords", mock.Anything, "c1", "en").Return([]domain.Word{{ID: "w1"}}, nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/words?category_id=c1&language=en", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	svc.On("DeleteWord", mock.Anything, "w1").Return(nil).Once()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("DELETE", "/words/w1", nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 }

@@ -63,7 +63,13 @@ func TestAdminService(t *testing.T) {
 	uRepo.Insert(&domain.User{ID: "u1", Username: "u"})
 	svc.SearchUsers(ctx, "u")
 	svc.BanUser(ctx, "u1")
+	banned, _ := uRepo.GetByID("u1")
+	assert.False(t, banned.IsActive)
+	assert.Equal(t, domain.AccountStatusBanned, banned.Status)
 	svc.UnbanUser(ctx, "u1")
+	unbanned, _ := uRepo.GetByID("u1")
+	assert.True(t, unbanned.IsActive)
+	assert.Equal(t, domain.AccountStatusActive, unbanned.Status)
 
 	// Bad words
 	bw, err := svc.CreateBadWord(ctx, "bad", "en")

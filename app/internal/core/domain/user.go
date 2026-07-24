@@ -6,6 +6,17 @@ package domain
 
 import "time"
 
+// AccountStatus explains why an account can or cannot authenticate. IsActive is
+// kept for fast/legacy checks, while Status gives the precise moderation state.
+type AccountStatus string
+
+const (
+	AccountStatusActive    AccountStatus = "active"
+	AccountStatusBanned    AccountStatus = "banned"
+	AccountStatusSuspended AccountStatus = "suspended"
+	AccountStatusDeleted   AccountStatus = "deleted"
+)
+
 // User is the central account entity.
 //
 // Why separate User from Profile?
@@ -18,6 +29,7 @@ type User struct {
 	Username     string
 	PasswordHash string
 	IsActive     bool
+	Status       AccountStatus
 	IsSuperuser  bool
 	BanCount     int        // How many times this user has been banned
 	BannedAt     *time.Time // Timestamp of the most recent ban

@@ -33,6 +33,14 @@ type AdminService interface {
 	ConfirmReport(ctx context.Context, id, adminID, note string) error
 	RejectReport(ctx context.Context, id, adminID, note string) error
 
+	// Dictionary
+	CreateCategory(ctx context.Context, name, language, groupID string) (*domain.Category, error)
+	ListCategories(ctx context.Context, language string) ([]domain.Category, error)
+	DeleteCategory(ctx context.Context, id string) error
+	CreateWord(ctx context.Context, categoryID, groupID, text, language string, points int) (*domain.Word, error)
+	ListWords(ctx context.Context, categoryID, language string) ([]domain.Word, error)
+	DeleteWord(ctx context.Context, id string) error
+
 	// Bad words
 	CreateBadWord(ctx context.Context, text, language string) (*domain.BadWord, error)
 	ListBadWords(ctx context.Context, language string) ([]domain.BadWord, error)
@@ -156,6 +164,7 @@ func (s *adminService) BanUser(ctx context.Context, userID string) error {
 
 	// 1. Disable account and update ban tracking metadata.
 	user.IsActive = false
+	user.Status = domain.AccountStatusBanned
 	user.BanCount++
 	now := time.Now()
 	user.BannedAt = &now
@@ -176,7 +185,95 @@ func (s *adminService) UnbanUser(ctx context.Context, userID string) error {
 		return errors.New(errors.ErrNotFound, "user not found")
 	}
 	user.IsActive = true
+	user.Status = domain.AccountStatusActive
+	user.BannedAt = nil
 	return s.userRepo.Update(user)
+}
+
+func (s *adminService) CreateCategory(ctx context.Context, name, language, groupID string) (*domain.Category, error) {
+	if s.contentRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	name = strings.TrimSpace(name)
+	language = strings.ToLower(strings.TrimSpace(language))
+	groupID = strings.TrimSpace(groupID)
+	if name == "" || (language != "en" && language != "fa") {
+		return nil, errors.New(errors.ErrBadRequest, "valid category name and language are required")
+	}
+	if groupID == "" {
+		groupID = uuid.New().String()
+	}
+	cat := &domain.Category{ID: uuid.New().String(), Name: name, Language: language, GroupID: groupID, CreatedAt: time.Now()}
+	if err := s.contentRepo.InsertCategory(ctx, cat); err != nil {
+		return nil, errors.New(errors.ErrConflict, "category could not be saved")
+	}
+	return cat, nil
+}
+
+func (s *adminService) ListCategories(ctx context.Context, language string) ([]domain.Category, error) {
+	if s.contentRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	language = strings.ToLower(strings.TrimSpace(language))
+	if language == "" {
+		language = "en"
+	}
+	if language != "en" && language != "fa" {
+		return nil, errors.New(errors.ErrBadRequest, "language must be en or fa")
+	}
+	return s.contentRepo.ListCategories(ctx, language)
+}
+
+func (s *adminService) DeleteCategory(ctx context.Context, id string) error {
+	if s.contentRepo == nil {
+		return errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	return s.contentRepo.DeleteCategory(ctx, strings.TrimSpace(id))
+}
+
+func (s *adminService) CreateWord(ctx context.Context, categoryID, groupID, text, language string, points int) (*domain.Word, error) {
+	if s.contentRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	categoryID = strings.TrimSpace(categoryID)
+	groupID = strings.TrimSpace(groupID)
+	text = strings.TrimSpace(text)
+	language = strings.ToLower(strings.TrimSpace(language))
+	if categoryID == "" || text == "" || (language != "en" && language != "fa") {
+		return nil, errors.New(errors.ErrBadRequest, "valid category, text, and language are required")
+	}
+	if points < 1 || points > 3 {
+		return nil, errors.New(errors.ErrBadRequest, "points must be between 1 and 3")
+	}
+	if groupID == "" {
+		groupID = uuid.New().String()
+	}
+	word := &domain.Word{ID: uuid.New().String(), CategoryID: categoryID, GroupID: groupID, Text: text, Language: language, Points: points, CreatedAt: time.Now()}
+	if err := s.contentRepo.InsertWord(ctx, word); err != nil {
+		return nil, errors.New(errors.ErrConflict, "word could not be saved")
+	}
+	return word, nil
+}
+
+func (s *adminService) ListWords(ctx context.Context, categoryID, language string) ([]domain.Word, error) {
+	if s.contentRepo == nil {
+		return nil, errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	language = strings.ToLower(strings.TrimSpace(language))
+	if language == "" {
+		language = "en"
+	}
+	if language != "en" && language != "fa" {
+		return nil, errors.New(errors.ErrBadRequest, "language must be en or fa")
+	}
+	return s.contentRepo.ListWords(ctx, strings.TrimSpace(categoryID), language)
+}
+
+func (s *adminService) DeleteWord(ctx context.Context, id string) error {
+	if s.contentRepo == nil {
+		return errors.New(errors.ErrInternalServer, "content repository is not configured")
+	}
+	return s.contentRepo.DeleteWord(ctx, strings.TrimSpace(id))
 }
 
 func (s *adminService) ListReports(ctx context.Context, status domain.ReportStatus, paging domain.Paging) (*domain.PageOf[domain.Report], error) {

@@ -273,3 +273,89 @@ func (ctrl *AdminController) RejectReport(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "report rejected"})
 }
+
+// CreateCategoryRequest defines a translated category entry. Entries sharing a
+// group_id represent the same category in different languages.
+type CreateCategoryRequest struct {
+	Name     string `json:"name"`
+	Language string `json:"language"`
+	GroupID  string `json:"group_id"`
+}
+
+func (ctrl *AdminController) CreateCategory(c *gin.Context) {
+	var req CreateCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(errors.New(errors.ErrBadRequest, "invalid body").Response())
+		return
+	}
+	cat, err := ctrl.adminSvc.CreateCategory(c.Request.Context(), req.Name, req.Language, req.GroupID)
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusCreated, cat)
+}
+
+func (ctrl *AdminController) ListCategories(c *gin.Context) {
+	cats, err := ctrl.adminSvc.ListCategories(c.Request.Context(), c.Query("language"))
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, cats)
+}
+
+func (ctrl *AdminController) DeleteCategory(c *gin.Context) {
+	if err := ctrl.adminSvc.DeleteCategory(c.Request.Context(), c.Param("id")); err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "category deleted"})
+}
+
+// CreateWordRequest defines a translated word entry. Entries sharing a group_id
+// represent the same guessable concept in different languages.
+type CreateWordRequest struct {
+	CategoryID string `json:"category_id"`
+	GroupID    string `json:"group_id"`
+	Text       string `json:"text"`
+	Language   string `json:"language"`
+	Points     int    `json:"points"`
+}
+
+func (ctrl *AdminController) CreateWord(c *gin.Context) {
+	var req CreateWordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(errors.New(errors.ErrBadRequest, "invalid body").Response())
+		return
+	}
+	word, err := ctrl.adminSvc.CreateWord(c.Request.Context(), req.CategoryID, req.GroupID, req.Text, req.Language, req.Points)
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusCreated, word)
+}
+
+func (ctrl *AdminController) ListWords(c *gin.Context) {
+	words, err := ctrl.adminSvc.ListWords(c.Request.Context(), c.Query("category_id"), c.Query("language"))
+	if err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, words)
+}
+
+func (ctrl *AdminController) DeleteWord(c *gin.Context) {
+	if err := ctrl.adminSvc.DeleteWord(c.Request.Context(), c.Param("id")); err != nil {
+		appErr, _ := err.(*errors.AppError)
+		c.JSON(appErr.Response())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "word deleted"})
+}

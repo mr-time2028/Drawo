@@ -40,17 +40,19 @@ const (
 )
 
 type PlayerState struct {
-	UserID            string `json:"user_id"`
-	Username          string `json:"username,omitempty"`
-	Score             int64  `json:"score"`
-	IsDrawer          bool   `json:"is_drawer"`
-	IsOnline          bool   `json:"is_online"`
-	GuessedWord       bool   `json:"guessed_word"`
-	ClientID          string `json:"-"`
-	JoinedAt          int64  `json:"joined_at"`
-	DisconnectedAt    int64  `json:"disconnected_at,omitempty"`
-	ReconnectDeadline int64  `json:"reconnect_deadline,omitempty"`
-	Abandoned         bool   `json:"abandoned"`
+	UserID             string `json:"user_id"`
+	Username           string `json:"username,omitempty"`
+	Score              int64  `json:"score"`
+	IsDrawer           bool   `json:"is_drawer"`
+	IsOnline           bool   `json:"is_online"`
+	GuessedWord        bool   `json:"guessed_word"`
+	CorrectGuesses     int64  `json:"correct_guesses"`
+	SuccessfulDrawings int64  `json:"successful_drawings"`
+	ClientID           string `json:"-"`
+	JoinedAt           int64  `json:"joined_at"`
+	DisconnectedAt     int64  `json:"disconnected_at,omitempty"`
+	ReconnectDeadline  int64  `json:"reconnect_deadline,omitempty"`
+	Abandoned          bool   `json:"abandoned"`
 }
 
 type PlayerEventPayload struct {
@@ -125,4 +127,14 @@ func wordCandidatesFromDomain(words []domain.Word) []WordCandidate {
 		out = append(out, WordCandidate{GroupID: w.GroupID, Text: w.Text, Points: points})
 	}
 	return out
+}
+
+type JoinedPayload struct {
+	RoomID string `json:"room_id"`
+	State  string `json:"state"`
+}
+
+type ReportSubmittedPayload struct {
+	Event    string `json:"event"`
+	ReportID string `json:"report_id"`
 }

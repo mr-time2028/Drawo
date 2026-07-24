@@ -97,7 +97,7 @@ func NewContainer(cfg config.Config) (*Container, error) {
 	roomSvc := services.NewRoomService(roomRepo)
 	adminSvc := services.NewAdminService(cfg, adminRepo, userRepo, profileRepo, sessionRepo, storageProvider, contentRepo, reportRepo, reputationRepo)
 
-	hub := realtime.NewHubWithDependencies(roomRepo, contentRepo, profileRepo, reputationRepo)
+	hub := realtime.NewHubWithDependencies(roomRepo, contentRepo, profileRepo, reputationRepo, reportRepo, userRepo, sessionRepo)
 
 	return &Container{
 		Config:   cfg,

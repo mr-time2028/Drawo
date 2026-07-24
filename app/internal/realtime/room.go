@@ -9,7 +9,7 @@ import (
 
 	"drawo/internal/core/domain"
 	"drawo/internal/core/ports/repositories"
-	apperrors "drawo/pkg/errors"
+	"drawo/pkg/errors"
 )
 
 const (
@@ -31,18 +31,19 @@ type Room struct {
 	reportKeys   map[string]struct{}
 	roundReports map[string]map[string]struct{}
 
-	gameState            string
-	players              map[string]*PlayerState
-	playerOrder          []string
-	currentDrawerIndex   int
-	suggestedWords       []WordCandidate
-	currentWord          *WordCandidate
-	roundEndsAt          time.Time
-	pausedRoundRemaining time.Duration
-	timer                *time.Timer
-	timerC               <-chan time.Time
-	reconnectTimer       *time.Timer
-	reconnectTimerC      <-chan time.Time
+	gameState             string
+	players               map[string]*PlayerState
+	playerOrder           []string
+	currentDrawerIndex    int
+	suggestedWords        []WordCandidate
+	currentWord           *WordCandidate
+	roundDrawingSucceeded bool
+	roundEndsAt           time.Time
+	pausedRoundRemaining  time.Duration
+	timer                 *time.Timer
+	timerC                <-chan time.Time
+	reconnectTimer        *time.Timer
+	reconnectTimerC       <-chan time.Time
 
 	// Canvas operation log. This is the authoritative in-memory canvas
 	// state for the current round. New joiners receive this log via canvas_sync
@@ -59,14 +60,14 @@ type Room struct {
 	chatHistory []ChatPayload
 }
 
-func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, reportRepo repositories.ReportRepository) *Room {
+func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, reportRepo repositories.ReportRepository, extraRepos ...interface{}) *Room {
 	return &Room{
 		state:        state,
 		clients:      make(map[string]*Client),
 		inbox:        make(chan *RoomEvent, 512),
 		onClose:      onClose,
 		contentRepo:  contentRepo,
-		reputation:   newReputationLedger(profileRepo, reputationRepo, state.ID),
+		reputation:   newReputationLedger(profileRepo, reputationRepo, state.ID, extraRepos...),
 		reportRepo:   reportRepo,
 		reportKeys:   make(map[string]struct{}),
 		roundReports: make(map[string]map[string]struct{}),
@@ -143,7 +144,7 @@ func (r *Room) handleEvent(e *RoomEvent) bool {
 				r.broadcast(e, "")
 			}
 		} else {
-			r.sendError(e.Client, apperrors.WSErrDrawNotAllowed, "drawing is not active")
+			r.sendError(e.Client, errors.WSErrDrawNotAllowed, "drawing is not active")
 		}
 	case EventChat:
 		r.handleChat(e)
@@ -159,17 +160,17 @@ func (r *Room) handleEvent(e *RoomEvent) bool {
 
 func (r *Room) applyDrawingEvent(e *RoomEvent) (json.RawMessage, bool) {
 	if !r.canClientDraw(e.Client) {
-		r.sendError(e.Client, apperrors.WSErrDrawForbidden, "only the current drawer can draw")
+		r.sendError(e.Client, errors.WSErrDrawForbidden, "only the current drawer can draw")
 		return nil, false
 	}
 
 	op, err := ValidateDrawingPayload(e.Payload)
 	if err != nil {
-		r.sendError(e.Client, apperrors.WSErrInvalidDraw, err.Error())
+		r.sendError(e.Client, errors.WSErrInvalidDraw, err.Error())
 		return nil, false
 	}
 	if err := r.allowDrawingOperation(e.Client.ID, op); err != nil {
-		r.sendError(e.Client, apperrors.WSErrDrawRateLimited, err.Error())
+		r.sendError(e.Client, errors.WSErrDrawRateLimited, err.Error())
 		return nil, false
 	}
 
@@ -298,8 +299,13 @@ func (r *Room) allowDrawingOperation(clientID string, op DrawOperation) error {
 	return nil
 }
 
-func (r *Room) sendError(client *Client, code apperrors.WSErrorCode, message string) {
-	r.sendSystem(client, EventError, ErrorPayload{Code: code.String(), Message: message})
+func (r *Room) sendError(client *Client, code errors.WSErrorCode, details string) {
+	message := errors.WSTranslatedMessage(r.state.Language, code)
+	payload := ErrorPayload{Code: code.String(), Message: message}
+	if details != "" && details != message && details != errors.WSDefaultMessage(code) {
+		payload.Details = details
+	}
+	r.sendSystem(client, EventError, payload)
 }
 
 func (r *Room) broadcast(e *RoomEvent, excludeClientID string) {
@@ -337,7 +343,20 @@ func (r *Room) sendSystem(client *Client, eventType EventType, payload any) {
 	}
 }
 
-func safeSend(client *Client, data []byte) bool {
+func safeSend(client *Client, data []byte) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	if client == nil || client.Send == nil {
+		return false
+	}
+	select {
+	case <-client.Done:
+		return false
+	default:
+	}
 	select {
 	case client.Send <- data:
 		return true
@@ -347,37 +366,43 @@ func safeSend(client *Client, data []byte) bool {
 }
 
 func closeClientSend(client *Client) {
+	defer func() { _ = recover() }()
 	if client == nil {
 		return
 	}
-	if client.Done == nil {
-		if client.Send != nil {
-			close(client.Send)
+	if client.Done != nil {
+		select {
+		case <-client.Done:
+			return
+		default:
+			close(client.Done)
 		}
-		return
 	}
-	select {
-	case <-client.Done:
-		// Already closed.
-	default:
-		close(client.Done)
-		if client.Send != nil {
-			close(client.Send)
-		}
+	if client.Send != nil {
+		close(client.Send)
 	}
 }
 
 func (r *Room) handleJoin(client *Client) {
-	r.clients[client.ID] = client
 	player := r.players[client.UserID]
 	isReconnect := false
+	if player != nil && player.IsOnline && player.ClientID != "" && player.ClientID != client.ID {
+		// One active socket per user per room. A reconnect or duplicate browser tab
+		// replaces the older socket so the same player cannot draw/guess twice.
+		if oldClient, ok := r.clients[player.ClientID]; ok {
+			delete(r.clients, oldClient.ID)
+			delete(r.drawLimits, oldClient.ID)
+			closeClientSend(oldClient)
+		}
+	}
+	r.clients[client.ID] = client
 	if player == nil {
 		player = &PlayerState{UserID: client.UserID, Username: client.Username, Score: 0, IsOnline: true, ClientID: client.ID, JoinedAt: time.Now().Unix()}
 		r.players[client.UserID] = player
 		r.playerOrder = append(r.playerOrder, client.UserID)
 	} else {
 		if player.Abandoned {
-			r.sendError(client, apperrors.WSErrReconnectExpired, "reconnect window expired")
+			r.sendError(client, errors.WSErrReconnectExpired, "reconnect window expired")
 			return
 		}
 		isReconnect = !player.IsOnline
@@ -395,7 +420,7 @@ func (r *Room) handleJoin(client *Client) {
 		r.resumeDrawerAfterReconnect()
 	}
 	r.sendSystem(client, EventCanvasSync, CanvasSyncPayload{Operations: append([]DrawOperation(nil), r.canvasOps...), ServerSeq: r.drawSeq})
-	r.sendSystem(client, EventJoined, map[string]any{"room_id": r.state.ID, "state": r.gameState})
+	r.sendSystem(client, EventJoined, JoinedPayload{RoomID: r.state.ID, State: r.gameState})
 	r.broadcastGameState()
 	if r.gameState == GameStateWaitingForPlayers && r.onlinePlayerCount() >= r.minPlayers() {
 		r.startCountdown()
@@ -442,26 +467,26 @@ func (r *Room) handleChat(e *RoomEvent) {
 		return
 	}
 	if e.Client.UserID == r.state.CurrentDrawerID {
-		r.sendError(e.Client, apperrors.WSErrDrawerChatBlocked, "drawer cannot chat during drawing")
+		r.sendError(e.Client, errors.WSErrDrawerChatBlocked, "drawer cannot chat during drawing")
 		return
 	}
 	var payload ChatPayload
 	if err := json.Unmarshal(e.Payload, &payload); err != nil || strings.TrimSpace(payload.Text) == "" {
-		r.sendError(e.Client, apperrors.WSErrInvalidChat, "chat text is required")
+		r.sendError(e.Client, errors.WSErrInvalidChat, "chat text is required")
 		return
 	}
 	if !r.allowChat(e.Client.ID) {
-		r.sendError(e.Client, apperrors.WSErrChatRateLimited, "too many chat messages")
+		r.sendError(e.Client, errors.WSErrChatRateLimited, "too many chat messages")
 		return
 	}
 	if r.containsBadWord(payload.Text) {
-		r.sendError(e.Client, apperrors.WSErrBadWord, "message contains prohibited words")
+		r.sendError(e.Client, errors.WSErrBadWord, "message contains prohibited words")
 		r.reputation.add(e.Client.UserID, -20, "chat_bad_word")
 		return
 	}
 	player := r.players[e.Client.UserID]
 	if player != nil && player.GuessedWord {
-		r.sendError(e.Client, apperrors.WSErrAlreadyGuessed, "you already guessed this word")
+		r.sendError(e.Client, errors.WSErrAlreadyGuessed, "you already guessed this word")
 		return
 	}
 	if r.currentWord != nil && NormalizeGuess(payload.Text, r.state.Language) == NormalizeGuess(r.currentWord.Text, r.state.Language) {
@@ -480,19 +505,21 @@ func (r *Room) handleCorrectGuess(client *Client) {
 		return
 	}
 	player.GuessedWord = true
-	base := int64(r.currentWord.Points * 100)
-	if base <= 0 {
-		base = 100
-	}
+	player.CorrectGuesses++
 	remaining := time.Until(r.roundEndsAt)
-	if remaining > 0 {
-		base += int64(remaining.Seconds())
+	player.Score += CalculateGuessScore(r.currentWord.Points, int64(remaining.Seconds()))
+	if r.isRankedGame() {
+		r.reputation.addPositiveCapped(player.UserID, correctGuessRepBonus, "correct_guess")
 	}
-	player.Score += base
-	r.reputation.addPositiveCapped(player.UserID, correctGuessRepBonus, "correct_guess")
 	if drawer := r.players[r.state.CurrentDrawerID]; drawer != nil {
-		drawer.Score += int64(r.currentWord.Points * 25)
-		r.reputation.addPositiveCapped(drawer.UserID, drawerSuccessRepBonus, "successful_drawing")
+		drawer.Score += CalculateDrawerBonus(r.currentWord.Points)
+		if !r.roundDrawingSucceeded {
+			drawer.SuccessfulDrawings++
+			r.roundDrawingSucceeded = true
+		}
+		if r.isRankedGame() {
+			r.reputation.addPositiveCapped(drawer.UserID, drawerSuccessRepBonus, "successful_drawing")
+		}
 	}
 	systemMsg := ChatPayload{System: true, Message: fmt.Sprintf("%s guessed the word!", displayName(player))}
 	r.recordChat(systemMsg)
@@ -555,30 +582,30 @@ func (r *Room) handleGameEvent(e *RoomEvent) {
 		Event string `json:"event"`
 	}
 	if err := json.Unmarshal(e.Payload, &base); err != nil {
-		r.sendError(e.Client, apperrors.WSErrInvalidGameEvent, "invalid game event")
+		r.sendError(e.Client, errors.WSErrInvalidGameEvent, "invalid game event")
 		return
 	}
 	switch base.Event {
 	case "choose_word":
 		var payload ChooseWordPayload
 		if err := json.Unmarshal(e.Payload, &payload); err != nil {
-			r.sendError(e.Client, apperrors.WSErrInvalidGameEvent, "invalid word choice")
+			r.sendError(e.Client, errors.WSErrInvalidGameEvent, "invalid word choice")
 			return
 		}
 		if r.gameState != GameStateWordSelection || e.Client.UserID != r.state.CurrentDrawerID {
-			r.sendError(e.Client, apperrors.WSErrWordChoiceForbidden, "only the current drawer can choose a word")
+			r.sendError(e.Client, errors.WSErrWordChoiceForbidden, "only the current drawer can choose a word")
 			return
 		}
 		r.chooseWord(payload.GroupID)
 	case "report":
 		var payload ReportPayload
 		if err := json.Unmarshal(e.Payload, &payload); err != nil {
-			r.sendError(e.Client, apperrors.WSErrInvalidReport, "invalid report payload")
+			r.sendError(e.Client, errors.WSErrInvalidReport, "invalid report payload")
 			return
 		}
 		r.handleReportEvent(e.Client, payload)
 	default:
-		r.sendError(e.Client, apperrors.WSErrUnsupportedGameEvent, "unsupported game event")
+		r.sendError(e.Client, errors.WSErrUnsupportedGameEvent, "unsupported game event")
 	}
 }
 
@@ -600,6 +627,7 @@ func (r *Room) startWordSelection() {
 	r.pickDrawer()
 	r.suggestedWords = r.loadWordSuggestions()
 	r.currentWord = nil
+	r.roundDrawingSucceeded = false
 	r.canvasOps = r.canvasOps[:0]
 	r.redoOps = make(map[string][]DrawOperation)
 	r.drawSeq = 0
@@ -657,10 +685,12 @@ func (r *Room) endGame() {
 	r.gameState = GameStateGameEnd
 	r.state.State = domain.RoomStateFinished
 	r.clearTimer()
-	for _, player := range r.players {
-		if !player.Abandoned {
-			r.reputation.addPositiveCapped(player.UserID, completionRepBonus, "completed_game")
-			r.reputation.addPositiveCapped(player.UserID, noReportRepBonus, "no_reports")
+	if r.isRankedGame() {
+		for _, player := range r.players {
+			if !player.Abandoned {
+				r.reputation.addPositiveCapped(player.UserID, completionRepBonus, "completed_game")
+				r.reputation.addPositiveCapped(player.UserID, noReportRepBonus, "no_reports")
+			}
 		}
 	}
 	r.reputation.flush()
@@ -921,6 +951,13 @@ func (r *Room) clearTimer() {
 	}
 	r.timer = nil
 	r.timerC = nil
+}
+
+func (r *Room) isRankedGame() bool {
+	// Public dictionary games are ranked. Private rooms and custom-word games are
+	// still playable and should be stored in history, but they must not farm global
+	// score/stat/reputation rewards.
+	return r.state.Type == domain.RoomTypePublic && len(r.state.CustomWords) == 0
 }
 
 func displayName(player *PlayerState) string {

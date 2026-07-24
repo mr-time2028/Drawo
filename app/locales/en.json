@@ -9,11 +9,42 @@
         "internal_server": "Internal server error",
         "bad_request": "Bad request",
         "conflict": "Item already exists",
-        "account_banned": "Your account has been banned. Please contact the administrator."
+        "account_banned": "Your account has been banned. Please contact the administrator.",
+        "account_suspended": "Your account has been suspended. Please contact the administrator.",
+        "account_deleted": "This account has been deleted.",
+        "account_inactive": "Your account is inactive. Please contact the administrator.",
+        "account_unavailable": "This account is not available."
     },
     "game": {
         "welcome": "Welcome to Drawo",
         "waiting_for_players": "Waiting for players...",
         "start_game": "Start Game"
+    },
+    "ws_errors": {
+        "auth_failed": "Authentication failed.",
+        "send_failed": "Could not send WebSocket message.",
+        "join_failed": "Could not join room.",
+        "rate_limited": "Too many WebSocket messages.",
+        "session_revoked": "Session is no longer active.",
+        "auth_expired": "WebSocket access token expired. Reconnect with a fresh access token.",
+        "bad_message": "Invalid WebSocket message.",
+        "room_error": "Room error.",
+        "draw_not_allowed": "Drawing is not active.",
+        "draw_forbidden": "Only the current drawer can draw.",
+        "invalid_draw": "Invalid drawing operation.",
+        "draw_rate_limited": "Too many drawing operations.",
+        "reconnect_expired": "Reconnect window expired.",
+        "drawer_chat_blocked": "Drawer cannot chat during drawing.",
+        "invalid_chat": "Chat text is required.",
+        "chat_rate_limited": "Too many chat messages.",
+        "bad_word": "Message contains prohibited words.",
+        "already_guessed": "You already guessed this word.",
+        "invalid_game_event": "Invalid game event.",
+        "word_choice_forbidden": "Only the current drawer can choose a word.",
+        "unsupported_game_event": "Unsupported game event.",
+        "reports_unavailable": "Reporting is not configured.",
+        "invalid_report": "Invalid report.",
+        "duplicate_report": "You already reported this player for this reason.",
+        "report_failed": "Could not store report."
     }
 }

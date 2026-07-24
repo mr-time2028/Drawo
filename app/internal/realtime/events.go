@@ -26,7 +26,6 @@ const (
 	EventAuthRequired      EventType = "auth_required" // Server asks client to refresh access token in background.
 	EventCanvasSync        EventType = "canvas_sync"   // Server sends current round drawing history to a joiner.
 	EventJoined            EventType = "joined"
-	EventLeft              EventType = "left"
 	EventPlayerJoined      EventType = "player_joined"
 	EventPlayerLeft        EventType = "player_left"
 	EventPlayerReconnected EventType = "player_reconnected"
@@ -58,6 +57,13 @@ type AuthPayload struct {
 	AccessToken string `json:"access_token"`
 }
 
+// AuthOKPayload confirms initial authentication or socket re-authentication.
+type AuthOKPayload struct {
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
 // JoinPayload asks the backend to place this socket into a room.
 //
 // Public matchmaking is backend-owned: clients normally send an empty payload or
@@ -76,6 +82,7 @@ type JoinPayload struct {
 type ErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
 }
 
 // AuthRequiredPayload tells the client to refresh its HTTP tokens in the
