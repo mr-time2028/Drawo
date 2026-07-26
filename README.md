@@ -1,65 +1,91 @@
-# Drawo
+# Drawo Workspace
 
-A production-quality multiplayer drawing and guessing game.
+Drawo is organized as a monorepo:
 
-## Quick start (development)
+```text
+Drawo/
+  backend/   Go API, realtime game server, migrations
+  frontend/  React/Vite browser app
+```
 
-1. Copy the environment file and adjust it:
-   ```bash
-   cp .env.example .env
-   ```
+## Run production-like stack with Docker
 
-2. Start the backing services:
-   ```bash
-   make dev-up
-   ```
+Copy the root Docker environment file:
 
-3. Run database migrations (Required on first start):
-   ```bash
-   cd app && go run . migrate
-   ```
+```bash
+cp .env.example .env
+```
 
-4. Run the Go server:
-   ```bash
-   cd app && go run . serve
-   ```
+Builds the frontend, serves it with Nginx, and proxies `/api` plus `/api/v1/ws` to the Go backend:
 
-5. Visit `http://localhost:8080/health/ping`.
+```bash
+make prod-up
+```
 
-## Configuration
+Run migrations after containers are up:
 
-Drawo is configured entirely through environment variables. For local development,
-copy `.env.example` to a single `.env` file in the repository root. Docker Compose
-reads this file automatically, and the Go app also loads it when started from the
-`app/` directory.
+```bash
+make migrate
+```
 
-`.env.example` at the repository root contains every available variable with sensible defaults.
+Open:
 
-In production, set the same variables directly in your container orchestrator.
+```text
+http://localhost
+```
 
-## Architecture
+Stop production stack:
 
-The backend follows **Clean Architecture / Hexagonal Architecture**:
+```bash
+make prod-down
+```
 
-- `internal/core` — pure domain entities and interfaces (no framework deps).
-- `internal/services` — application use cases.
-- `internal/repositories` — GORM persistence.
-- `internal/delivery/http` — Gin controllers, middlewares, routes.
-- `internal/infrastructure` — DB, Redis/cache, file storage, DI container.
-- `internal/realtime` — WebSocket protocol, secure socket auth/re-auth, hub, and per-room goroutines.
-- `internal/delivery/websocket` — WebSocket delivery adapter and route registration.
-- `pkg` — cross-cutting utilities.
+## Development workflow
 
-See `docs/database-schema.md` for database details and `docs/MIGRATIONS.md` for migration usage.
+For development, run only infrastructure in Docker and run backend/frontend manually in terminals.
 
-## Commands
+First-time setup:
 
-| Command | Description |
-|---------|-------------|
-| `make dev-up` | Start Postgres + Redis for development |
-| `make prod-up` | Start full production stack |
-| `make build` | Build the Go binary |
-| `make test` | Run unit tests |
-| `make test-race` | Run tests with race detector |
-| `make test-coverage` | Generate HTML test coverage report |
+```bash
+cp .env.example .env
+make backend-infra-up
+make backend-download
+make backend-migrate
+```
 
+Terminal 1 — run backend:
+
+```bash
+make backend-dev
+```
+
+Terminal 2 — install and run frontend:
+
+```bash
+make frontend-install
+make frontend-dev
+```
+
+Backend API:
+
+```text
+http://localhost:8080
+```
+
+Frontend dev server:
+
+```text
+http://localhost:5173
+```
+
+Backend instructions:
+
+```text
+backend/README.md
+```
+
+Frontend instructions:
+
+```text
+frontend/README.md
+```

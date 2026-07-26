@@ -1,0 +1,3 @@
+Vazirmatn downloaded from https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/
+Project: https://github.com/rastikerdar/vazirmatn
+License: SIL Open Font License 1.1
