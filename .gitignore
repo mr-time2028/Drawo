@@ -1,29 +1,29 @@
-# Environment files
-.env
-
-# Go build artifacts
-app/bin/
-
-# Local file storage uploads
-app/uploads/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# IDE
+# Root workspace ignores
+.DS_Store
+Thumbs.db
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# Backend secrets and generated files
+backend/.env
+backend/app/bin/
+backend/app/uploads/
+backend/app/*.out
+backend/app/*.test
+backend/app/coverage.html
+
+# Frontend secrets and generated files
+frontend/.env
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# General binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib

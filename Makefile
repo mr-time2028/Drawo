@@ -1,44 +1,66 @@
-# Drawo Makefile
+# Drawo root Makefile
 #
-# One-command targets for development and production.
+# Use this from the repository root.
 
-.PHONY: dev-up dev-down dev-logs prod-up prod-down prod-logs build test test-race test-coverage lint fmt
+.PHONY: prod-up prod-down prod-logs backend-infra-up backend-infra-down backend-infra-logs backend-download backend-tidy backend-migrate backend-dev frontend-install frontend-dev backend-test frontend-test frontend-test-coverage test migrate
 
-# Development commands (backing services only)
-dev-up:
-	docker-compose -f docker-compose-dev.yml up -d
-
-dev-down:
-	docker-compose -f docker-compose-dev.yml down
-
-dev-logs:
-	docker-compose -f docker-compose-dev.yml logs -f
-
-# Production commands (full stack)
+# Production-like stack: Nginx serves built frontend and proxies API/WebSocket.
 prod-up:
-	docker-compose up --build -d
+	docker compose up -d --build
 
 prod-down:
-	docker-compose down
+	docker compose down
 
 prod-logs:
-	docker-compose logs -f
+	docker compose logs -f
 
-# Go commands (run from app/)
-build:
-	cd app && go build -o bin/drawo .
+# Backend infrastructure only: Postgres + Redis.
+# This delegates to backend/docker-compose-dev.yml.
+backend-infra-up:
+	cd backend && docker compose -f docker-compose-dev.yml up -d
 
-test:
-	cd app && go test ./...
+backend-infra-down:
+	cd backend && docker compose -f docker-compose-dev.yml down
 
-test-race:
-	cd app && go test -race ./...
+backend-infra-logs:
+	cd backend && docker compose -f docker-compose-dev.yml logs -f
 
-test-coverage:
-	cd app && go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html && rm coverage.out
+# Download Go modules for a fresh clone without changing go.mod/go.sum.
+backend-download:
+	cd backend/app && go mod download
 
-fmt:
-	cd app && gofmt -w .
+# Tidy Go modules after adding/removing backend imports. This can modify go.mod/go.sum.
+backend-tidy:
+	cd backend/app && go mod tidy
 
-lint:
-	cd app && golangci-lint run ./...
+# Run database migrations while developing backend locally.
+backend-migrate:
+	cd backend/app && go run . migrate
+
+# Run the Go backend directly on your machine.
+# Start Postgres + Redis first with backend-infra-up.
+backend-dev:
+	cd backend/app && go run . serve
+
+frontend-install:
+	cd frontend && npm install
+
+# Run the frontend directly on your machine.
+frontend-dev:
+	cd frontend && npm run dev
+
+backend-test:
+	cd backend/app && go test ./...
+
+frontend-test:
+	cd frontend && npm test
+
+frontend-test-coverage:
+	cd frontend && npm run test:coverage
+
+test: backend-test frontend-test
+
+# Run migrations against the production-like Docker network.
+# For local/manual backend development, use backend-migrate.
+migrate:
+	docker compose run --rm app ./drawo migrate
