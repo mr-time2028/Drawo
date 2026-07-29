@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"drawo/internal/core/ports/repositories"
 	"drawo/pkg/errors"
 	"drawo/pkg/i18n"
+	"drawo/pkg/logger"
 	"drawo/pkg/security"
 )
 
@@ -61,10 +63,15 @@ func NewAuthService(
 }
 
 // Register creates a new user and an associated empty profile.
+func logInternalAuthError(ctx context.Context, message string, err error) {
+	logger.WithContext(ctx).Error(message, slog.Any("error", err))
+}
+
 func (s *authService) Register(ctx context.Context, username, password string) (*domain.User, error) {
 	// 1. Check if user already exists
 	exists, err := s.userRepo.Exists(username)
 	if err != nil {
+		logInternalAuthError(ctx, "database lookup failed", err)
 		return nil, errors.New(errors.ErrInternalServer, "database lookup failed")
 	}
 	if exists {
@@ -74,6 +81,7 @@ func (s *authService) Register(ctx context.Context, username, password string) (
 	// 2. Hash the password securely
 	hash, err := security.HashPassword(password)
 	if err != nil {
+		logInternalAuthError(ctx, "failed to process password", err)
 		return nil, errors.New(errors.ErrInternalServer, "failed to process password")
 	}
 
@@ -105,6 +113,7 @@ func (s *authService) Register(ctx context.Context, username, password string) (
 	// username is already taken on the next try.
 	if creator, ok := s.userRepo.(repositories.AccountCreator); ok {
 		if err := creator.CreateUserWithProfile(ctx, user, profile); err != nil {
+			logInternalAuthError(ctx, "failed to create user account", err)
 			return nil, errors.New(errors.ErrInternalServer, "failed to create user account")
 		}
 		return user, nil
@@ -113,9 +122,11 @@ func (s *authService) Register(ctx context.Context, username, password string) (
 	// Fallback for non-transactional test doubles. Real database repositories
 	// implement AccountCreator above.
 	if err := s.userRepo.Insert(user); err != nil {
+		logInternalAuthError(ctx, "failed to create user account", err)
 		return nil, errors.New(errors.ErrInternalServer, "failed to create user account")
 	}
 	if err := s.profileRepo.Insert(profile); err != nil {
+		logInternalAuthError(ctx, "failed to create user profile", err)
 		return nil, errors.New(errors.ErrInternalServer, "failed to create user profile")
 	}
 
@@ -147,6 +158,7 @@ func (s *authService) Login(ctx context.Context, username, password, ip, userAge
 	limitKey := fmt.Sprintf("login_attempt:%s", username)
 	allowed, err := s.limiter.Allow(ctx, limitKey, s.cfg.Auth.MaxLoginAttempts, s.cfg.Auth.LoginLockoutDuration)
 	if err != nil {
+		logInternalAuthError(ctx, "security check failed", err)
 		return nil, errors.New(errors.ErrInternalServer, "security check failed")
 	}
 	if !allowed {
@@ -193,12 +205,14 @@ func (s *authService) Login(ctx context.Context, username, password, ip, userAge
 
 	// The SessionRepository.Set logic automatically enforces Single Device Policy (Kills old session).
 	if err := s.sessionRepo.Set(ctx, session); err != nil {
+		logInternalAuthError(ctx, "failed to establish session", err)
 		return nil, errors.New(errors.ErrInternalServer, "failed to establish session")
 	}
 
 	// 5. Generate JWTs
 	acc, ref, err := s.jwt.GenerateTokenPair(user.ID, sessionID, tokenID)
 	if err != nil {
+		logInternalAuthError(ctx, "token generation failed", err)
 		return nil, errors.New(errors.ErrInternalServer, "token generation failed")
 	}
 
@@ -240,12 +254,14 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*domain
 	session.ExpiresAt = time.Now().Add(s.cfg.Auth.RefreshTokenExpiry) // Sliding window session
 
 	if err := s.sessionRepo.Set(ctx, session); err != nil {
+		logInternalAuthError(ctx, "failed to rotate session", err)
 		return nil, errors.New(errors.ErrInternalServer, "failed to rotate session")
 	}
 
 	// 5. Generate new tokens
 	acc, ref, err := s.jwt.GenerateTokenPair(session.UserID, session.ID, newTokenID)
 	if err != nil {
+		logInternalAuthError(ctx, "token generation failed", err)
 		return nil, errors.New(errors.ErrInternalServer, "token generation failed")
 	}
 

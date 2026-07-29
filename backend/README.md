@@ -1,21 +1,31 @@
 # Drawo Backend
 
+The backend project owns its own Docker Compose file and env example.
+
+```text
+backend/
+  docker-compose.yml
+  .env.example
+  app/
+    Dockerfile
+    go.mod
+    migrations/
+    internal/
+```
+
 ## Requirements
 
 - Go
 - Docker
 - Docker Compose
 
-## Fresh clone setup
+## Run full backend stack with Docker
 
-From the repository root:
+From `backend/`:
 
 ```bash
 cp .env.example .env
-make backend-infra-up
-make backend-download
-make backend-migrate
-make backend-dev
+docker compose up -d --build
 ```
 
 Backend API:
@@ -30,12 +40,33 @@ Health check:
 http://localhost:8080/health/ping
 ```
 
-## Run backend directly from this folder
+## Run only backend development infrastructure
+
+Use this when you want Docker to run only Postgres + Redis, while you run the Go app manually:
 
 ```bash
-cp .env.example .env
+docker compose -f docker-compose-dev.yml up -d
+```
+
+or:
+
+```bash
 make dev-up
-make deps
+```
+
+## Run backend locally with Go
+
+Start Postgres and Redis first. You can use the backend compose stack or your own local services.
+
+```bash
+cd app
+go run . migrate
+go run . serve
+```
+
+Or from `backend/`:
+
+```bash
 make migrate
 make serve
 ```
@@ -68,8 +99,8 @@ make test
 make build
 ```
 
-## Stop infrastructure
+## Stop Docker stack
 
 ```bash
-make dev-down
+make down
 ```

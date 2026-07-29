@@ -1,0 +1,27 @@
+# Drawo frontend stack.
+#
+# Use from frontend/:
+#
+#   cp .env.example .env
+#   docker compose up -d --build
+#
+# This compose file belongs to the frontend project only. It builds the React app
+# from frontend/app and serves it with Nginx. Nginx proxies /api, /api/v1/ws,
+# and /uploads to the backend running on the host at localhost:8080.
+
+services:
+  frontend:
+    container_name: drawo_frontend
+    build:
+      context: ..
+      dockerfile: frontend/app/Dockerfile
+      args:
+        # Empty API/WS URLs make the frontend use same-origin paths.
+        # Nginx below proxies those paths to the backend.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_WS_URL: ${VITE_WS_URL:-}
+        VITE_DEFAULT_LANGUAGE: ${VITE_DEFAULT_LANGUAGE:-fa}
+    ports:
+      - "${FRONTEND_HTTP_PORT:-3000}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

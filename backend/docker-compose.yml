@@ -1,24 +1,48 @@
-# Drawo backend development infrastructure.
+# Drawo backend stack.
 #
-# Use from backend/ when you want to run only Postgres + Redis in Docker and
-# run the Go backend manually on your host:
+# Use from backend/:
 #
-#   docker compose -f docker-compose-dev.yml up -d
+#   cp .env.example .env
+#   docker compose up -d --build
 #
-# This file intentionally does NOT run the Go app container.
+# Compose reads backend/.env for variable substitution, and the app container
+# also receives backend/.env through env_file. Keep backend config in .env.
 
 services:
+  app:
+    container_name: drawo_backend_app
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "${DRAWO_SERVER_PORT}:8080"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   postgres:
-    container_name: drawo_backend_dev_postgres
+    container_name: drawo_backend_postgres
     image: postgres:17-alpine
     environment:
+      # Official Postgres image requires POSTGRES_* names, mapped from backend/.env.
       POSTGRES_DB: ${DRAWO_DATABASE_NAME}
       POSTGRES_USER: ${DRAWO_DATABASE_USER}
       POSTGRES_PASSWORD: ${DRAWO_DATABASE_PASSWORD}
     ports:
       - "${DRAWO_DATABASE_PORT}:5432"
     volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -26,7 +50,7 @@ services:
       retries: 5
 
   redis:
-    container_name: drawo_backend_dev_redis
+    container_name: drawo_backend_redis
     image: redis:7-alpine
     environment:
       REDIS_PASSWORD: ${DRAWO_REDIS_PASSWORD}
@@ -49,4 +73,5 @@ services:
       retries: 5
 
 volumes:
-  postgres_dev_data:
+  postgres_data:
+  uploads:

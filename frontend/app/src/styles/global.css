@@ -1910,3 +1910,122 @@ label {
     gap: 0.85rem;
   }
 }
+
+.dashboard-page {
+  min-height: 100vh;
+  padding: clamp(5.5rem, 8vw, 6.5rem) clamp(1rem, 4vw, 4rem) clamp(2rem, 4vw, 4rem);
+  background:
+    radial-gradient(circle at top left, rgba(74, 152, 247, 0.24), transparent 30rem),
+    linear-gradient(135deg, var(--page-start) 0%, var(--page-mid) 55%, var(--page-end) 100%);
+}
+
+.dashboard-shell {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: clamp(1rem, 3vw, 2rem);
+}
+
+.dashboard-hero-card,
+.dashboard-card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: 0 18px 52px rgba(47, 127, 227, 0.12);
+}
+
+.dashboard-hero-card {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.4rem, 4vw, 2.4rem);
+  border-radius: 32px;
+}
+
+.dashboard-hero-card h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(2.1rem, 6vw, 4.2rem);
+  line-height: 1;
+}
+
+.dashboard-hero-card p {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.dashboard-card {
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
+  min-height: 210px;
+  padding: 1.25rem;
+  border-radius: 28px;
+}
+
+.dashboard-card-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--sky-500) 13%, transparent);
+}
+
+.dashboard-card h2 {
+  margin: 0.4rem 0 0;
+  color: var(--ink);
+  font-size: 1.1rem;
+}
+
+.dashboard-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+@media (max-width: 920px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .dashboard-page {
+    padding: 1rem 0.8rem 1.4rem;
+  }
+
+  .dashboard-hero-card,
+  .dashboard-card {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-actions,
+  .dashboard-actions button {
+    width: 100%;
+  }
+
+  .dashboard-card {
+    min-height: auto;
+  }
+}

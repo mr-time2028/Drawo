@@ -9,10 +9,10 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY frontend/app/package*.json ./
 RUN npm ci
 
-COPY . .
+COPY frontend/app .
 
 ARG VITE_API_BASE_URL=
 ARG VITE_WS_URL=

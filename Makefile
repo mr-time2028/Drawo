@@ -1,66 +1,62 @@
 # Drawo root Makefile
 #
-# Use this from the repository root.
+# Use this from the repository root as a convenience wrapper. There is no root
+# docker-compose.yml and no root .env. Backend and frontend are separate projects.
 
-.PHONY: prod-up prod-down prod-logs backend-infra-up backend-infra-down backend-infra-logs backend-download backend-tidy backend-migrate backend-dev frontend-install frontend-dev backend-test frontend-test frontend-test-coverage test migrate
+.PHONY: backend-up backend-down backend-logs backend-dev-up backend-dev-down backend-dev-logs backend-download backend-tidy backend-migrate backend-serve frontend-up frontend-down frontend-logs frontend-install frontend-dev backend-test frontend-test frontend-test-coverage test
 
-# Production-like stack: Nginx serves built frontend and proxies API/WebSocket.
-prod-up:
-	docker compose up -d --build
+backend-up:
+	cd backend && docker compose up -d --build
 
-prod-down:
-	docker compose down
+backend-down:
+	cd backend && docker compose down
 
-prod-logs:
-	docker compose logs -f
+backend-logs:
+	cd backend && docker compose logs -f
 
-# Backend infrastructure only: Postgres + Redis.
-# This delegates to backend/docker-compose-dev.yml.
-backend-infra-up:
+backend-dev-up:
 	cd backend && docker compose -f docker-compose-dev.yml up -d
 
-backend-infra-down:
+backend-dev-down:
 	cd backend && docker compose -f docker-compose-dev.yml down
 
-backend-infra-logs:
+backend-dev-logs:
 	cd backend && docker compose -f docker-compose-dev.yml logs -f
 
-# Download Go modules for a fresh clone without changing go.mod/go.sum.
 backend-download:
 	cd backend/app && go mod download
 
-# Tidy Go modules after adding/removing backend imports. This can modify go.mod/go.sum.
 backend-tidy:
 	cd backend/app && go mod tidy
 
-# Run database migrations while developing backend locally.
 backend-migrate:
 	cd backend/app && go run . migrate
 
-# Run the Go backend directly on your machine.
-# Start Postgres + Redis first with backend-infra-up.
-backend-dev:
+backend-serve:
 	cd backend/app && go run . serve
 
-frontend-install:
-	cd frontend && npm install
+frontend-up:
+	cd frontend && docker compose up -d --build
 
-# Run the frontend directly on your machine.
+frontend-down:
+	cd frontend && docker compose down
+
+frontend-logs:
+	cd frontend && docker compose logs -f
+
+frontend-install:
+	cd frontend/app && npm install
+
 frontend-dev:
-	cd frontend && npm run dev
+	cd frontend/app && npm run dev
 
 backend-test:
 	cd backend/app && go test ./...
 
 frontend-test:
-	cd frontend && npm test
+	cd frontend/app && npm test
 
 frontend-test-coverage:
-	cd frontend && npm run test:coverage
+	cd frontend/app && npm run test:coverage
 
 test: backend-test frontend-test
-
-# Run migrations against the production-like Docker network.
-# For local/manual backend development, use backend-migrate.
-migrate:
-	docker compose run --rm app ./drawo migrate

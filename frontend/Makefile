@@ -1,27 +1,36 @@
 # Drawo frontend Makefile
 #
-# Use this from the frontend/ directory. Frontend development runs on your host
-# machine with Node/npm, not Docker.
+# Use this from the frontend/ directory. The React/Vite application lives in
+# frontend/app, while frontend/docker-compose.yml belongs to the frontend project.
 
-.PHONY: install dev test test-coverage typecheck build preview
+.PHONY: up down logs install dev test test-coverage typecheck build preview
+
+up:
+	docker compose up -d --build
+
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f
 
 install:
-	npm install
+	cd app && npm install
 
 dev:
-	npm run dev
+	cd app && npm run dev
 
 test:
-	npm test
+	cd app && npm test
 
 test-coverage:
-	npm run test:coverage
+	cd app && npm run test:coverage
 
 typecheck:
-	npm run typecheck
+	cd app && npm run typecheck
 
 build:
-	npm run build
+	cd app && npm run build
 
 preview:
-	npm run preview
+	cd app && npm run preview
