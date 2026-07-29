@@ -8,6 +8,8 @@ import {
 import { useState } from 'react';
 
 import { AppControls } from './components/AppControls';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { DashboardPage } from './pages/DashboardPage';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 
@@ -43,7 +45,17 @@ export function createAppRouter() {
     component: () => <LoginPage initialMode="register" />,
   });
 
-  return createRouter({ routeTree: rootRoute.addChildren([indexRoute, loginRoute, registerRoute]) });
+  const appRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: 'app',
+    component: () => (
+      <ProtectedRoute>
+        <DashboardPage />
+      </ProtectedRoute>
+    ),
+  });
+
+  return createRouter({ routeTree: rootRoute.addChildren([indexRoute, loginRoute, registerRoute, appRoute]) });
 }
 
 const router = createAppRouter();

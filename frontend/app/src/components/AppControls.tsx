@@ -1,4 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { isSupportedLanguage, type SupportedLanguage } from '../i18n/languages';
@@ -13,26 +14,43 @@ export function AppControls() {
   const isPersian = currentLanguage === 'fa';
   const isDark = theme === 'dark';
   const showAuthLinks = pathname === '/';
+  const [mobileMenuIsOpen, setMobileMenuIsOpen] = useState(false);
 
   function toggleLanguage() {
     const nextLanguage: SupportedLanguage = isPersian ? 'en' : 'fa';
     void i18n.changeLanguage(nextLanguage);
   }
 
+  function closeMobileMenu() {
+    setMobileMenuIsOpen(false);
+  }
+
   return (
     <nav className="app-navbar" aria-label={t('common.mainNavigation')}>
-      <Link className="navbar-logo" to="/" aria-label={t('common.home')}>
+      <Link className="navbar-logo" to="/" aria-label={t('common.home')} onClick={closeMobileMenu}>
         <span className="navbar-logo-mark">D</span>
         <span className="navbar-logo-text">rawo</span>
       </Link>
 
-      <div className="navbar-actions">
+      <button
+        aria-expanded={mobileMenuIsOpen}
+        aria-label={t('common.menu')}
+        className="mobile-menu-button"
+        type="button"
+        onClick={() => setMobileMenuIsOpen((isOpen) => !isOpen)}
+      >
+        <span className="mobile-menu-line" aria-hidden="true" />
+        <span className="mobile-menu-line" aria-hidden="true" />
+        <span className="mobile-menu-line" aria-hidden="true" />
+      </button>
+
+      <div className={`navbar-actions ${mobileMenuIsOpen ? 'is-open' : ''}`}>
         {showAuthLinks && (
           <div className="navbar-auth-links" aria-label={t('common.authLinks')}>
-            <Link className="navbar-link" to="/login">
+            <Link className="navbar-link" to="/login" onClick={closeMobileMenu}>
               {t('auth.login')}
             </Link>
-            <Link className="navbar-link navbar-link-primary" to="/register">
+            <Link className="navbar-link navbar-link-primary" to="/register" onClick={closeMobileMenu}>
               {t('auth.register')}
             </Link>
           </div>

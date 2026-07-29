@@ -47,6 +47,11 @@ export function LoginPage({ initialMode = 'login' }: LoginPageProps) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (accessToken && initialMode === 'login') {
+      void navigate({ to: '/app' });
+      return;
+    }
+
     setMode(initialMode);
     setError(null);
     setInvalidFields([]);
@@ -61,7 +66,7 @@ export function LoginPage({ initialMode = 'login' }: LoginPageProps) {
     }
 
     setSuccessKey(null);
-  }, [initialMode]);
+  }, [accessToken, initialMode, navigate]);
 
   const isRegister = mode === 'register';
   const trimmedUsernameLength = username.trim().length;
@@ -156,6 +161,7 @@ export function LoginPage({ initialMode = 'login' }: LoginPageProps) {
 
       const tokens = await login(username.trim(), password);
       setTokens(tokens.access_token, tokens.refresh_token);
+      await navigate({ to: '/app' });
     } catch (err) {
       markBackendErrorFields(err);
       setError({ kind: 'api', error: err });

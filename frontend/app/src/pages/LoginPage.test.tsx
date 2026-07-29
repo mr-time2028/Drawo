@@ -37,8 +37,13 @@ async function renderLoginPage(initialPath: '/login' | '/register' = '/login') {
     path: 'register',
     component: () => <LoginPage initialMode="register" />,
   });
+  const appRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: 'app',
+    component: () => <p>Dashboard reached</p>,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([loginRoute, registerRoute]),
+    routeTree: rootRoute.addChildren([loginRoute, registerRoute, appRoute]),
     history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
 
@@ -72,7 +77,7 @@ describe('LoginPage', () => {
     await userEvent.type(screen.getByLabelText(/^password$/i), 'secret');
     await userEvent.click(screen.getByRole('button', { name: /login/i }));
 
-    expect(await screen.findByText(/logged in/i)).toBeInTheDocument();
+    expect(await screen.findByText('Dashboard reached')).toBeInTheDocument();
     expect(localStorage.getItem('drawo.access_token')).toBe('access-token');
     expect(localStorage.getItem('drawo.refresh_token')).toBe('refresh-token');
   });
@@ -217,6 +222,24 @@ describe('LoginPage', () => {
     expect(confirmInput.closest('.password-field')).toHaveClass('is-error');
   });
 
+  it('redirects anonymous users from app dashboard to login', async () => {
+    window.history.pushState({}, '', '/app');
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
+  });
+
+  it('shows the protected dashboard for authenticated users in Persian', async () => {
+    useAuthStore.getState().setTokens('access-token', 'refresh-token');
+    window.history.pushState({}, '', '/app');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'خوش برگشتی' })).toBeInTheDocument();
+    expect(screen.getByText('شروع بازی به‌زودی')).toBeInTheDocument();
+  });
+
   it('uses global controls for language and theme on the landing page', async () => {
     window.history.pushState({}, '', '/');
     render(<App />);
@@ -224,7 +247,7 @@ describe('LoginPage', () => {
     expect(await screen.findByText('بازی کن')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('switch', { name: 'تغییر زبان' }));
-    expect(screen.getByText(/learn a new language by drawing/i)).toBeInTheDocument();
+    expect(screen.getByText(/^learn$/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /login/i })).toBeInTheDocument();
     expect(document.documentElement.dir).toBe('ltr');
 
@@ -328,15 +351,17 @@ describe('LoginPage', () => {
     expect(passwordInput).toHaveAttribute('type', 'password');
   });
 
-  it('clears local tokens from the logged-in state', async () => {
+  it('logs out from the dashboard and clears local tokens', async () => {
     await useEnglish();
     useAuthStore.getState().setTokens('access-token', 'refresh-token');
+    window.history.pushState({}, '', '/app');
 
-    await renderLoginPage('/login');
+    render(<App />);
 
-    await userEvent.click(screen.getByRole('button', { name: /clear token/i }));
+    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /logout/i }));
 
-    expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /login/i })).toBeInTheDocument();
     expect(localStorage.getItem('drawo.access_token')).toBeNull();
   });
 });

@@ -54,10 +54,8 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 	// 3. Call Service
 	user, err := ctrl.authSvc.Register(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-		// Our pkg/errors helper automatically maps the error to the correct status code.
 		appErr, _ := err.(*errors.AppError)
-		status, body := appErr.Response()
-		c.JSON(status, body)
+		c.JSON(appErr.Response())
 		return
 	}
 
@@ -91,8 +89,7 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 	tokens, err := ctrl.authSvc.Login(c.Request.Context(), req.Username, req.Password, ip, ua)
 	if err != nil {
 		appErr, _ := err.(*errors.AppError)
-		status, body := appErr.Response()
-		c.JSON(status, body)
+		c.JSON(appErr.Response())
 		return
 	}
 
@@ -117,8 +114,7 @@ func (ctrl *AuthController) Refresh(c *gin.Context) {
 	tokens, err := ctrl.authSvc.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		appErr, _ := err.(*errors.AppError)
-		status, body := appErr.Response()
-		c.JSON(status, body)
+		c.JSON(appErr.Response())
 		return
 	}
 

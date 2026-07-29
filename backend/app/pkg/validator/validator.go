@@ -34,30 +34,15 @@ func mustRegisterValidation(tag string, fn validator.Func) {
 }
 
 func hasUppercase(fl validator.FieldLevel) bool {
-	for _, char := range fl.Field().String() {
-		if unicode.IsUpper(char) {
-			return true
-		}
-	}
-	return false
+	return stringHasUppercase(fl.Field().String())
 }
 
 func hasNumber(fl validator.FieldLevel) bool {
-	for _, char := range fl.Field().String() {
-		if unicode.IsDigit(char) {
-			return true
-		}
-	}
-	return false
+	return stringHasNumber(fl.Field().String())
 }
 
 func hasSpecialCharacter(fl validator.FieldLevel) bool {
-	for _, char := range fl.Field().String() {
-		if unicode.IsPunct(char) || unicode.IsSymbol(char) {
-			return true
-		}
-	}
-	return false
+	return stringHasSpecialCharacter(fl.Field().String())
 }
 
 // Struct validates a struct and returns field-error maps.
@@ -86,7 +71,99 @@ func Struct(s interface{}) map[string][]string {
 		errors[jsonName] = append(errors[jsonName], messageForTag(fieldErr.Tag()))
 	}
 
+	appendPasswordRuleErrors(s, structType, errors)
+
 	return errors
+}
+
+func appendPasswordRuleErrors(s interface{}, structType reflect.Type, errors map[string][]string) {
+	structValue := reflect.ValueOf(s)
+	if structValue.Kind() == reflect.Ptr {
+		structValue = structValue.Elem()
+	}
+	if !structValue.IsValid() || structValue.Kind() != reflect.Struct {
+		return
+	}
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+		validateTag := field.Tag.Get("validate")
+		if !containsValidationTag(validateTag, "password_uppercase") &&
+			!containsValidationTag(validateTag, "password_number") &&
+			!containsValidationTag(validateTag, "password_special") {
+			continue
+		}
+
+		fieldValue := structValue.Field(i)
+		if fieldValue.Kind() != reflect.String {
+			continue
+		}
+
+		password := fieldValue.String()
+		if password == "" {
+			continue
+		}
+
+		jsonName := jsonTag(structType, field.Name)
+		if containsValidationTag(validateTag, "password_uppercase") && !stringHasUppercase(password) {
+			errors[jsonName] = appendUniqueMessage(errors[jsonName], messageForTag("password_uppercase"))
+		}
+		if containsValidationTag(validateTag, "password_number") && !stringHasNumber(password) {
+			errors[jsonName] = appendUniqueMessage(errors[jsonName], messageForTag("password_number"))
+		}
+		if containsValidationTag(validateTag, "password_special") && !stringHasSpecialCharacter(password) {
+			errors[jsonName] = appendUniqueMessage(errors[jsonName], messageForTag("password_special"))
+		}
+	}
+}
+
+func containsValidationTag(validateTag string, expected string) bool {
+	for _, tag := range strings.Split(validateTag, ",") {
+		name := tag
+		if idx := strings.Index(name, "="); idx != -1 {
+			name = name[:idx]
+		}
+		if name == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func appendUniqueMessage(messages []string, message string) []string {
+	for _, existing := range messages {
+		if existing == message {
+			return messages
+		}
+	}
+	return append(messages, message)
+}
+
+func stringHasUppercase(value string) bool {
+	for _, char := range value {
+		if unicode.IsUpper(char) {
+			return true
+		}
+	}
+	return false
+}
+
+func stringHasNumber(value string) bool {
+	for _, char := range value {
+		if unicode.IsDigit(char) {
+			return true
+		}
+	}
+	return false
+}
+
+func stringHasSpecialCharacter(value string) bool {
+	for _, char := range value {
+		if unicode.IsPunct(char) || unicode.IsSymbol(char) {
+			return true
+		}
+	}
+	return false
 }
 
 // jsonTag returns the json tag for a struct field, or the field name if absent.

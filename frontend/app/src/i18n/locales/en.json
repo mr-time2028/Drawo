@@ -30,7 +30,8 @@
     "confirmPasswordMatches": "Confirm password matches the password",
     "passwordUppercase": "At least one uppercase letter",
     "passwordNumber": "At least one number",
-    "passwordSpecialCharacter": "At least one special character, like @ or #"
+    "passwordSpecialCharacter": "At least one special character, like @ or #",
+    "logout": "Logout"
   },
   "errors": {
     "account_banned": "Your account has been banned. Please contact the administrator.",
@@ -60,7 +61,8 @@
     "english": "English",
     "persian": "Persian",
     "whiteTheme": "White",
-    "darkTheme": "Dark"
+    "darkTheme": "Dark",
+    "menu": "Open menu"
   },
   "fields": {
     "username": "Username",
@@ -98,7 +100,7 @@
     "wordCar": "Car",
     "gameplayLabel": "Gameplay glimpse",
     "titleLineOne": "play",
-    "titleLineTwo": "learn a new language by drawing",
+    "titleLineTwo": "learn",
     "titleLineThree": "enjoy",
     "gameplayStepOne": "choose a word",
     "gameplayStepTwo": "start drawing",
@@ -111,5 +113,20 @@
     "featureNumberOne": "1",
     "featureNumberTwo": "2",
     "featureNumberThree": "3"
+  },
+  "dashboard": {
+    "eyebrow": "Your Drawo space",
+    "title": "Welcome back",
+    "subtitle": "This is your protected dashboard. Game features will be added step by step",
+    "startGame": "Start game soon",
+    "sectionsLabel": "Dashboard sections",
+    "playTitle": "Play",
+    "playBody": "Create and join drawing games in the next phases",
+    "profileTitle": "Profile",
+    "profileBody": "Manage your avatar, language and game identity later",
+    "friendsTitle": "Friends",
+    "friendsBody": "Friend lists and invitations will come after the shell is stable",
+    "settingsTitle": "Settings",
+    "settingsBody": "Theme, language and sound preferences will live here"
   }
 }

@@ -30,7 +30,8 @@
     "confirmPasswordMatches": "تکرار رمز عبور با رمز عبور اصلی یکسان است",
     "passwordUppercase": "حداقل یک حرف بزرگ انگلیسی",
     "passwordNumber": "حداقل یک عدد",
-    "passwordSpecialCharacter": "حداقل یک کاراکتر خاص مثل @ یا #"
+    "passwordSpecialCharacter": "حداقل یک کاراکتر خاص مثل @ یا #",
+    "logout": "خروج"
   },
   "errors": {
     "account_banned": "حساب کاربری شما مسدود شده است. لطفا با مدیر سیستم تماس بگیرید.",
@@ -60,7 +61,8 @@
     "english": "انگلیسی",
     "persian": "فارسی",
     "whiteTheme": "سفید",
-    "darkTheme": "تیره"
+    "darkTheme": "تیره",
+    "menu": "باز کردن منو"
   },
   "fields": {
     "username": "نام کاربری",
@@ -98,7 +100,7 @@
     "wordCar": "ماشین",
     "gameplayLabel": "نمای روند بازی",
     "titleLineOne": "بازی کن",
-    "titleLineTwo": "با نقاشی یک زبان جدید یاد بگیر",
+    "titleLineTwo": "یاد بگیر",
     "titleLineThree": "لذت ببر",
     "gameplayStepOne": "یک کلمه انتخاب کن",
     "gameplayStepTwo": "شروع به نقاشی کن",
@@ -111,5 +113,20 @@
     "featureNumberOne": "۱",
     "featureNumberTwo": "۲",
     "featureNumberThree": "۳"
+  },
+  "dashboard": {
+    "eyebrow": "فضای دراووی شما",
+    "title": "خوش برگشتی",
+    "subtitle": "این داشبورد محافظت‌شده شماست. قابلیت‌های بازی مرحله‌به‌مرحله اضافه می‌شوند",
+    "startGame": "شروع بازی به‌زودی",
+    "sectionsLabel": "بخش‌های داشبورد",
+    "playTitle": "بازی",
+    "playBody": "ساخت و ورود به بازی‌های نقاشی در فازهای بعدی اضافه می‌شود",
+    "profileTitle": "پروفایل",
+    "profileBody": "مدیریت آواتار، زبان و هویت بازی بعداً اینجا قرار می‌گیرد",
+    "friendsTitle": "دوستان",
+    "friendsBody": "لیست دوستان و دعوت‌ها بعد از پایدار شدن داشبورد اضافه می‌شوند",
+    "settingsTitle": "تنظیمات",
+    "settingsBody": "تنظیمات پوسته، زبان و صدا اینجا قرار می‌گیرد"
   }
 }
