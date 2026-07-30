@@ -5,10 +5,7 @@ import { ApiError } from '../api/http';
 function translateFieldError(field: string, message: string, t: TFunction) {
   const fieldLabel = t(`fields.${field}`);
   const translatedField = fieldLabel === `fields.${field}` ? field : fieldLabel;
-  const normalizedMessageKey = message
-    .toLowerCase()
-    .replace(/\.$/, '')
-    .replace(/ /g, '_');
+  const normalizedMessageKey = message.toLowerCase().replace(/\.$/, '').replace(/ /g, '_');
   const translatedMessage = t(`validation.${normalizedMessageKey}`);
   const finalMessage =
     translatedMessage === `validation.${normalizedMessageKey}` ? message : translatedMessage;

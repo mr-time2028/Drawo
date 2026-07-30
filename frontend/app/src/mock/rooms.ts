@@ -1,0 +1,141 @@
+import type { Player, Room } from '@/types';
+import { avatarFor, mockMe } from './users';
+
+function player(
+  id: string,
+  userId: string,
+  username: string,
+  score: number,
+  isDrawer: boolean,
+  isHost: boolean,
+  isSelf: boolean,
+): Player {
+  return {
+    id,
+    userId,
+    username,
+    avatarUrl: avatarFor(username),
+    score,
+    isDrawer,
+    isHost,
+    isOnline: true,
+    isSelf,
+  };
+}
+
+export const mockRoom: Room = {
+  id: 'room-1',
+  name: 'Fun with Animals 🐾',
+  inviteCode: 'ABC123',
+  ownerId: 'u1',
+  type: 'public',
+  language: 'en',
+  categoryId: 'cat-animals',
+  categoryName: 'Animals',
+  state: 'playing',
+  minPlayers: 2,
+  maxPlayers: 8,
+  roundTime: 80,
+  maxRounds: 8,
+  currentRound: 3,
+  players: [
+    player('p1', 'u1', 'Alice', 140, false, true, false),
+    player('p2', mockMe.id, mockMe.username, 120, true, false, true),
+    player('p3', 'u3', 'Charlie', 95, false, false, false),
+    player('p4', 'u5', 'Ehsan', 80, false, false, false),
+  ],
+};
+
+export const mockPublicRooms: Room[] = [
+  mockRoom,
+  {
+    id: 'room-2',
+    name: 'Persian Food Night 🍛',
+    inviteCode: null,
+    ownerId: 'u2',
+    type: 'public',
+    language: 'fa',
+    categoryId: 'cat-food',
+    categoryName: 'Food',
+    state: 'playing',
+    minPlayers: 2,
+    maxPlayers: 6,
+    roundTime: 60,
+    maxRounds: 6,
+    currentRound: 2,
+    players: [
+      player('r2-p1', 'u2', 'Babak', 70, true, true, false),
+      player('r2-p2', 'u6', 'Faezeh', 60, false, false, false),
+      player('r2-p3', 'u7', 'Golnaz', 45, false, false, false),
+    ],
+  },
+  {
+    id: 'room-3',
+    name: 'Travel & Places ✈️',
+    inviteCode: null,
+    ownerId: 'u4',
+    type: 'public',
+    language: 'en',
+    categoryId: 'cat-travel',
+    categoryName: 'Travel',
+    state: 'lobby',
+    minPlayers: 2,
+    maxPlayers: 8,
+    roundTime: 80,
+    maxRounds: 8,
+    currentRound: 0,
+    players: [player('r3-p1', 'u4', 'Dina', 0, false, true, false)],
+  },
+  {
+    id: 'room-4',
+    name: 'Private with friends 🔒',
+    inviteCode: 'PRIV8',
+    ownerId: 'u3',
+    type: 'private',
+    language: 'en',
+    categoryId: null,
+    categoryName: 'Mixed',
+    state: 'lobby',
+    minPlayers: 2,
+    maxPlayers: 6,
+    roundTime: 80,
+    maxRounds: 6,
+    currentRound: 0,
+    players: [
+      player('r4-p1', 'u3', 'Charlie', 0, false, true, false),
+      player('r4-p2', mockMe.id, mockMe.username, 0, false, false, true),
+    ],
+  },
+];
+
+export const mockRecentGames = [
+  {
+    id: 'g1',
+    date: '2026-07-28T18:30:00Z',
+    players: ['you', 'Alice', 'Charlie', 'Dina'],
+    placement: 1,
+    myScore: 220,
+  },
+  { id: 'g2', date: '2026-07-27T20:10:00Z', players: ['you', 'Babak', 'Faezeh'], placement: 2, myScore: 145 },
+  {
+    id: 'g3',
+    date: '2026-07-26T15:45:00Z',
+    players: ['you', 'Alice', 'Ehsan', 'Golnaz', 'Hossein'],
+    placement: 3,
+    myScore: 90,
+  },
+  {
+    id: 'g4',
+    date: '2026-07-25T12:00:00Z',
+    players: ['you', 'Alice', 'Charlie'],
+    placement: 1,
+    myScore: 180,
+  },
+  {
+    id: 'g5',
+    date: '2026-07-24T22:15:00Z',
+    players: ['you', 'Dina', 'Babak', 'Ehsan'],
+    placement: 4,
+    myScore: 55,
+  },
+];

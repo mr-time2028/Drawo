@@ -31,7 +31,9 @@
     "passwordUppercase": "حداقل یک حرف بزرگ انگلیسی",
     "passwordNumber": "حداقل یک عدد",
     "passwordSpecialCharacter": "حداقل یک کاراکتر خاص مثل @ یا #",
-    "logout": "خروج"
+    "logout": "خروج",
+    "logoutBackendFailed": "خروج از سیستم در سمت کلاینت انجام شد اما ارتباط با سرور برقرار نشد.",
+    "loggingOut": "در حال خروج…"
   },
   "errors": {
     "account_banned": "حساب کاربری شما مسدود شده است. لطفا با مدیر سیستم تماس بگیرید.",
@@ -62,7 +64,9 @@
     "persian": "فارسی",
     "whiteTheme": "سفید",
     "darkTheme": "تیره",
-    "menu": "باز کردن منو"
+    "menu": "باز کردن منو",
+    "dashboard": "داشبورد",
+    "goToDashboard": "رفتن به داشبورد"
   },
   "fields": {
     "username": "نام کاربری",

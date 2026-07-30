@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { useAuthStore } from './authStore';
 
+afterEach(() => {
+  localStorage.clear();
+  useAuthStore.getState().clearTokens();
+});
+
 describe('authStore', () => {
   it('stores and clears tokens', () => {
     useAuthStore.getState().setTokens('access', 'refresh');

@@ -1,18 +1,37 @@
 import { useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
-import { useAuthStore } from '../stores/authStore';
+import { logout as apiLogout } from '@/api/auth';
+import { useAuthStore } from '@/stores/authStore';
 
 export function DashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const accessToken = useAuthStore((state) => state.accessToken);
   const clearTokens = useAuthStore((state) => state.clearTokens);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
-  function handleLogout() {
-    // Keep logout behavior centralized here until the backend logout endpoint is wired.
-    // Clearing local tokens immediately prevents protected-route access after logout.
-    clearTokens();
-    void navigate({ to: '/login' });
+  async function handleLogout() {
+    setLogoutLoading(true);
+    try {
+      // Call backend logout first, while we still hold the access token and
+      // this component is still mounted. The access_token is always a real
+      // string after the login-response normalization fix in api/auth.ts.
+      if (accessToken) {
+        await apiLogout(accessToken);
+      }
+    } catch (err) {
+      // Network error / backend down: still clear local state below, but tell
+      // the user that the server-side session might survive briefly.
+      console.warn('[dashboard] backend logout failed:', err);
+      toast.error(t('auth.logoutBackendFailed'));
+    } finally {
+      clearTokens();
+      setLogoutLoading(false);
+      void navigate({ to: '/login', replace: true });
+    }
   }
 
   return (
@@ -26,8 +45,13 @@ export function DashboardPage() {
             <button className="primary-button" type="button" disabled>
               {t('dashboard.startGame')}
             </button>
-            <button className="secondary-button" type="button" onClick={handleLogout}>
-              {t('auth.logout')}
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={handleLogout}
+              disabled={logoutLoading}
+            >
+              {logoutLoading ? t('auth.loggingOut', 'Logging out…') : t('auth.logout')}
             </button>
           </div>
         </div>

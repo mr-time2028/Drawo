@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
@@ -7,6 +9,11 @@ export default defineConfig({
   // Keep one frontend project env file at frontend/.env instead of duplicating
   // another .env inside frontend/app.
   envDir: '..',
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   plugins: [react()],
   server: {
     port: 5173,

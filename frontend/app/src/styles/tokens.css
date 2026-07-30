@@ -1,0 +1,145 @@
+/* ==========================================================================
+   Drawo design tokens
+   --------------------------------------------------------------------------
+   Every color, radius, shadow and type token lives here. Components should
+   only reference these CSS variables so theming (light/dark) and RTL work
+   uniformly. Keep this file flat — no component styles here.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Brand sky palette */
+  --sky-50: #eef7ff;
+  --sky-100: #dff0ff;
+  --sky-200: #bfe1ff;
+  --sky-300: #8ec7ff;
+  --sky-400: #5aa9ff;
+  --sky-500: #4a98f7;
+  --sky-600: #2f7fe3;
+  --sky-700: #1e65be;
+
+  /* Semantic */
+  --ink: #11233f;
+  --muted: #688199;
+  --border: rgba(74, 152, 247, 0.18);
+  --border-strong: rgba(74, 152, 247, 0.34);
+
+  /* Feedback */
+  --danger: #dc2626;
+  --danger-bg: color-mix(in srgb, #dc2626 12%, transparent);
+  --success: #15803d;
+  --success-bg: color-mix(in srgb, #15803d 12%, transparent);
+  --warning: #d97706;
+  --warning-bg: color-mix(in srgb, #d97706 14%, transparent);
+  --info: #4a98f7;
+  --info-bg: color-mix(in srgb, #4a98f7 14%, transparent);
+
+  /* Surfaces */
+  --bg-page-start: #f8fcff;
+  --bg-page-mid: #eef7ff;
+  --bg-page-end: #ffffff;
+  --card: rgba(255, 255, 255, 0.88);
+  --card-solid: #ffffff;
+  --input-bg: rgba(255, 255, 255, 0.86);
+  --elev-1: 0 12px 34px rgba(47, 127, 227, 0.12);
+  --elev-2: 0 18px 48px rgba(47, 127, 227, 0.14);
+  --elev-3: 0 24px 80px rgba(47, 127, 227, 0.16);
+
+  /* Radii */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-2xl: 32px;
+  --radius-pill: 999px;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Typography */
+  --fs-xs: 0.78rem;
+  --fs-sm: 0.86rem;
+  --fs-md: 0.95rem;
+  --fs-lg: 1.1rem;
+  --fs-xl: 1.35rem;
+  --fs-2xl: 1.8rem;
+  --fs-3xl: 2.4rem;
+  --fw-regular: 400;
+  --fw-bold: 700;
+  --fw-black: 900;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --sky-50: #102a42;
+  --sky-100: #143a5d;
+  --sky-200: #1d4e7d;
+  --sky-300: #4a98f7;
+  --sky-400: #5aa9ff;
+  --sky-500: #5aa9ff;
+  --sky-600: #8ec7ff;
+  --sky-700: #bfe1ff;
+
+  --ink: #eaf6ff;
+  --muted: #a8c1d8;
+  --border: rgba(142, 199, 255, 0.24);
+  --border-strong: rgba(142, 199, 255, 0.42);
+
+  --danger: #fb7185;
+  --danger-bg: color-mix(in srgb, #fb7185 16%, transparent);
+  --success: #86efac;
+  --success-bg: color-mix(in srgb, #86efac 14%, transparent);
+  --warning: #fbbf24;
+  --warning-bg: color-mix(in srgb, #fbbf24 16%, transparent);
+
+  --bg-page-start: #06111f;
+  --bg-page-mid: #081827;
+  --bg-page-end: #0d2438;
+  --card: rgba(8, 24, 39, 0.82);
+  --card-solid: #0d2438;
+  --input-bg: rgba(11, 31, 51, 0.9);
+
+  --elev-1: 0 12px 34px rgba(0, 0, 0, 0.32);
+  --elev-2: 0 18px 48px rgba(0, 0, 0, 0.40);
+  --elev-3: 0 24px 80px rgba(0, 0, 0, 0.50);
+}
+
+/* Persian / RTL font */
+@font-face {
+  font-family: 'Drawo Vazirmatn';
+  src: url('../assets/fonts/Vazirmatn-Regular.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Drawo Vazirmatn';
+  src: url('../assets/fonts/Vazirmatn-Bold.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Drawo Vazirmatn';
+  src: url('../assets/fonts/Vazirmatn-Black.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 900;
+  font-style: normal;
+}

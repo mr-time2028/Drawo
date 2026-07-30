@@ -31,7 +31,9 @@
     "passwordUppercase": "At least one uppercase letter",
     "passwordNumber": "At least one number",
     "passwordSpecialCharacter": "At least one special character, like @ or #",
-    "logout": "Logout"
+    "logout": "Logout",
+    "logoutBackendFailed": "Logged out locally. Server session may still be active briefly.",
+    "loggingOut": "Logging out…"
   },
   "errors": {
     "account_banned": "Your account has been banned. Please contact the administrator.",
@@ -62,7 +64,9 @@
     "persian": "Persian",
     "whiteTheme": "White",
     "darkTheme": "Dark",
-    "menu": "Open menu"
+    "menu": "Open menu",
+    "dashboard": "Dashboard",
+    "goToDashboard": "Go to dashboard"
   },
   "fields": {
     "username": "Username",

@@ -1,94 +1,18 @@
-@font-face {
-  font-family: "Drawo Vazirmatn";
-  src: url("../assets/fonts/Vazirmatn-Regular.woff2") format("woff2");
-  font-display: swap;
-  font-weight: 400;
-  font-style: normal;
-}
+/* Drawo global stylesheet
+ * Tokens, reset, and reusable keyframes live in their own files so they can be
+ * imported in tests and story/dev pages without pulling all page CSS along. */
+@import './tokens.css';
+@import './reset.css';
+@import './keyframes.css';
 
-@font-face {
-  font-family: "Drawo Vazirmatn";
-  src: url("../assets/fonts/Vazirmatn-Bold.woff2") format("woff2");
-  font-display: swap;
-  font-weight: 700;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "Drawo Vazirmatn";
-  src: url("../assets/fonts/Vazirmatn-Black.woff2") format("woff2");
-  font-display: swap;
-  font-weight: 900;
-  font-style: normal;
-}
-
-:root {
-  color-scheme: light;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #eef7ff;
-  color: #11233f;
-  --sky-50: #eef7ff;
-  --sky-100: #dff0ff;
-  --sky-300: #8ec7ff;
-  --sky-500: #4a98f7;
-  --sky-600: #2f7fe3;
-  --ink: #11233f;
-  --muted: #688199;
-  --danger: #dc2626;
-  --success: #15803d;
-  --card: rgba(255, 255, 255, 0.88);
-  --input-bg: rgba(255, 255, 255, 0.86);
-  --page-start: #f8fcff;
-  --page-mid: #eef7ff;
-  --page-end: #ffffff;
-  --border: rgba(74, 152, 247, 0.18);
-  --shadow: 0 24px 80px rgba(47, 127, 227, 0.16);
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  background: #081827;
-  color: #eaf6ff;
-  --sky-50: #102a42;
-  --sky-100: #143a5d;
-  --sky-300: #4a98f7;
-  --sky-500: #5aa9ff;
-  --sky-600: #8ec7ff;
-  --ink: #eaf6ff;
-  --muted: #a8c1d8;
-  --danger: #fb7185;
-  --success: #86efac;
-  --card: rgba(8, 24, 39, 0.82);
-  --input-bg: rgba(11, 31, 51, 0.9);
-  --page-start: #06111f;
-  --page-mid: #081827;
-  --page-end: #0d2438;
-  --border: rgba(142, 199, 255, 0.24);
-  --shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-}
-
-html[lang="fa"] body {
-  font-family: "Drawo Vazirmatn", Vazirmatn, Tahoma, Arial, sans-serif;
-}
-
-button,
-input {
-  font: inherit;
-}
-
-button {
-  border: 0;
-}
+/* --------------------------------------------------------------------------
+ * NOTE: Design tokens (colors, radii, spacing, typography) live in tokens.css.
+ *       Component primitives live in components/ui/*.
+ *       The rules below are LEGACY page/section styles for the shipped
+ *       landing, auth and placeholder-dashboard pages. As those pages are
+ *       rewritten with the new primitives in Phases 1–3, the corresponding
+ *       legacy blocks should be removed from this file.
+ * -------------------------------------------------------------------------- */
 
 input {
   width: 100%;
@@ -125,6 +49,10 @@ label {
   font-size: 0.92rem;
   font-weight: 700;
 }
+
+/* --------------------------------------------------------------------------
+ * Public navbar (landing / auth)
+ * -------------------------------------------------------------------------- */
 
 .app-navbar {
   position: fixed;
@@ -208,6 +136,27 @@ label {
   color: white;
 }
 
+.navbar-avatar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 12px 34px rgba(47, 127, 227, 0.12);
+  backdrop-filter: blur(16px);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 180ms ease;
+}
+
+.navbar-avatar-button:hover {
+  transform: translateY(-1px);
+}
+
 .app-controls {
   display: flex;
   flex-direction: row;
@@ -237,19 +186,21 @@ label {
 }
 
 .toggle-label {
-  min-width: 2.6rem;
+  min-width: 1.8rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   font-size: 0.78rem;
+  font-weight: 800;
   line-height: 1;
+  letter-spacing: 0.02em;
 }
 
 .theme-switch .toggle-label {
   min-width: 1.7rem;
   height: 1.7rem;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
   font-size: 1.35rem;
   line-height: 1;
 }
@@ -276,33 +227,32 @@ label {
   transition: transform 180ms ease;
 }
 
-.toggle-switch[aria-checked="true"] .toggle-track {
+.toggle-switch[aria-checked='true'] .toggle-track {
   background: color-mix(in srgb, var(--sky-500) 26%, var(--sky-100));
 }
 
-.toggle-switch[aria-checked="true"] .toggle-thumb {
+.toggle-switch[aria-checked='true'] .toggle-thumb {
   transform: translateX(20px);
 }
 
-
-:root[data-theme="dark"] .toggle-switch {
+:root[data-theme='dark'] .toggle-switch {
   background: rgba(8, 24, 39, 0.92);
   border-color: rgba(142, 199, 255, 0.28);
   color: #d8ecff;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
 }
 
-:root[data-theme="dark"] .toggle-track {
+:root[data-theme='dark'] .toggle-track {
   background: #102a42;
   box-shadow: inset 0 0 0 1px rgba(142, 199, 255, 0.28);
 }
 
-:root[data-theme="dark"] .toggle-thumb {
+:root[data-theme='dark'] .toggle-thumb {
   background: #8ec7ff;
   box-shadow: 0 4px 14px rgba(142, 199, 255, 0.28);
 }
 
-:root[data-theme="dark"] .toggle-switch[aria-checked="true"] .toggle-track {
+:root[data-theme='dark'] .toggle-switch[aria-checked='true'] .toggle-track {
   background: color-mix(in srgb, #4a98f7 34%, #102a42);
 }
 
@@ -313,6 +263,10 @@ label {
   font-weight: 800;
 }
 
+/* --------------------------------------------------------------------------
+ * Auth page
+ * -------------------------------------------------------------------------- */
+
 .auth-page {
   min-height: 100vh;
   display: grid;
@@ -321,7 +275,7 @@ label {
   background:
     radial-gradient(circle at top left, rgba(74, 152, 247, 0.28), transparent 32rem),
     radial-gradient(circle at bottom right, rgba(142, 199, 255, 0.42), transparent 30rem),
-    linear-gradient(135deg, var(--page-start) 0%, var(--page-mid) 50%, var(--page-end) 100%);
+    linear-gradient(135deg, var(--bg-page-start) 0%, var(--bg-page-mid) 50%, var(--bg-page-end) 100%);
 }
 
 .auth-shell {
@@ -336,7 +290,7 @@ label {
 .card {
   border: 1px solid var(--border);
   border-radius: 32px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-3);
   backdrop-filter: blur(18px);
 }
 
@@ -356,7 +310,7 @@ label {
 
 .auth-hero::before,
 .auth-hero::after {
-  content: "";
+  content: '';
   position: absolute;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.2);
@@ -667,13 +621,17 @@ label {
   font-size: 0.86rem;
 }
 
+/* --------------------------------------------------------------------------
+ * Landing page
+ * -------------------------------------------------------------------------- */
+
 .landing-page {
   min-height: 100vh;
   padding: clamp(5.5rem, 8vw, 6.5rem) clamp(1rem, 4vw, 4rem) clamp(2rem, 4vw, 4rem);
   background:
     radial-gradient(circle at top left, rgba(74, 152, 247, 0.3), transparent 32rem),
     radial-gradient(circle at 85% 15%, rgba(142, 199, 255, 0.34), transparent 26rem),
-    linear-gradient(135deg, var(--page-start) 0%, var(--page-mid) 52%, var(--page-end) 100%);
+    linear-gradient(135deg, var(--bg-page-start) 0%, var(--bg-page-mid) 52%, var(--bg-page-end) 100%);
 }
 
 .landing-hero {
@@ -751,7 +709,7 @@ label {
   border: 1px solid var(--border);
   border-radius: 32px;
   background: var(--card);
-  box-shadow: var(--shadow);
+  box-shadow: var(--elev-3);
   backdrop-filter: blur(18px);
 }
 
@@ -761,7 +719,7 @@ label {
 }
 
 .preview-canvas::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 1rem;
   border-radius: 24px;
@@ -927,8 +885,9 @@ label {
   }
 }
 
-:root[data-theme="dark"] .navbar-logo-mark,
-:root[data-theme="dark"] .navbar-auth-links {
+:root[data-theme='dark'] .navbar-logo-mark,
+:root[data-theme='dark'] .navbar-auth-links,
+:root[data-theme='dark'] .navbar-avatar-button {
   background: rgba(8, 24, 39, 0.92);
   border-color: rgba(142, 199, 255, 0.28);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
@@ -1134,7 +1093,7 @@ label {
 }
 
 .fantasy-canvas::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 1rem;
   border: 2px dashed color-mix(in srgb, var(--sky-500) 20%, transparent);
@@ -1359,7 +1318,7 @@ label {
   background: color-mix(in srgb, var(--card) 88%, white 12%);
   box-shadow: 0 18px 40px rgba(47, 127, 227, 0.14);
   backdrop-filter: blur(14px);
-  animation: floating-token-bob 3.8s ease-in-out infinite;
+  animation: drawo-float-bob 3.8s ease-in-out infinite;
 }
 
 .floating-token span {
@@ -1388,7 +1347,7 @@ label {
   animation-delay: 0.9s;
 }
 
-@keyframes floating-token-bob {
+@keyframes drawo-float-bob {
   0%,
   100% {
     translate: 0 0;
@@ -1585,110 +1544,6 @@ label {
   }
 }
 
-/* Compact navbar layout for small screens. */
-@media (max-width: 720px) {
-  .app-navbar {
-    position: fixed;
-    top: 0.55rem;
-    left: 0.55rem;
-    right: 0.55rem;
-    align-items: flex-start;
-    gap: 0.55rem;
-  }
-
-  .navbar-logo {
-    gap: 0.12rem;
-    font-size: 1.05rem;
-  }
-
-  .navbar-logo-mark {
-    width: 42px;
-    height: 42px;
-    border-radius: 16px;
-    font-size: 1.22rem;
-  }
-
-  .navbar-actions {
-    display: grid;
-    gap: 0.45rem;
-    justify-items: end;
-  }
-
-  .navbar-auth-links {
-    gap: 0.35rem;
-    padding: 0.28rem;
-  }
-
-  .navbar-link {
-    min-height: 30px;
-    padding: 0.38rem 0.65rem;
-    font-size: 0.78rem;
-  }
-
-  .app-controls {
-    gap: 0.45rem;
-  }
-
-  .toggle-switch {
-    min-height: 36px;
-    gap: 0.35rem;
-    padding: 0.32rem 0.42rem;
-  }
-
-  .toggle-label {
-    min-width: 2.05rem;
-    font-size: 0.68rem;
-  }
-
-  .theme-switch .toggle-label {
-    min-width: 1.35rem;
-    height: 1.35rem;
-    font-size: 1.1rem;
-  }
-
-  .toggle-track {
-    width: 40px;
-    height: 23px;
-  }
-
-  .toggle-thumb {
-    top: 3.5px;
-    left: 3.5px;
-    width: 16px;
-    height: 16px;
-  }
-
-  .toggle-switch[aria-checked="true"] .toggle-thumb {
-    transform: translateX(17px);
-  }
-}
-
-@media (max-width: 520px) {
-  .app-navbar {
-    position: fixed;
-  }
-
-  .navbar-actions {
-    gap: 0.38rem;
-  }
-
-  .app-controls {
-    display: grid;
-    grid-template-columns: 1fr;
-    justify-items: end;
-    gap: 0.38rem;
-  }
-
-  .landing-page {
-    padding-top: 11.5rem;
-  }
-
-  .auth-page {
-    padding-top: 9rem;
-  }
-}
-
-/* Final mobile navbar/layout fix: keep navbar in normal flow so it never covers hero text. */
 @media (max-width: 720px) {
   .app-navbar {
     position: sticky;
@@ -1699,7 +1554,7 @@ label {
     margin: 0;
     padding: 0.65rem;
     align-items: flex-start;
-    background: linear-gradient(180deg, var(--page-start) 0%, color-mix(in srgb, var(--page-start) 86%, transparent) 100%);
+    background: linear-gradient(180deg, var(--bg-page-start) 0%, color-mix(in srgb, var(--bg-page-start) 86%, transparent) 100%);
     pointer-events: auto;
   }
 
@@ -1771,7 +1626,7 @@ label {
     grid-template-columns: auto auto;
     align-items: start;
     padding: 0.65rem;
-    background: linear-gradient(180deg, var(--page-start) 0%, color-mix(in srgb, var(--page-start) 88%, transparent) 100%);
+    background: linear-gradient(180deg, var(--bg-page-start) 0%, color-mix(in srgb, var(--bg-page-start) 88%, transparent) 100%);
     pointer-events: auto;
   }
 
@@ -1811,7 +1666,7 @@ label {
     border: 1px solid var(--border);
     border-radius: 24px;
     background: var(--card);
-    box-shadow: var(--shadow);
+    box-shadow: var(--elev-3);
     backdrop-filter: blur(18px);
   }
 
@@ -1824,6 +1679,20 @@ label {
     display: grid;
     grid-template-columns: 1fr 1fr;
     box-shadow: none;
+  }
+
+  .navbar-dashboard-link {
+    width: 100%;
+    justify-content: center;
+    box-shadow: none;
+  }
+
+  .navbar-dashboard-label {
+    padding-inline: 0.5rem;
+  }
+
+  .navbar-avatar-button {
+    justify-self: end;
   }
 
   .navbar-link {
@@ -1878,7 +1747,7 @@ label {
   }
 
   .landing-page {
-    background: linear-gradient(135deg, var(--page-start) 0%, var(--page-mid) 55%, var(--page-end) 100%);
+    background: linear-gradient(135deg, var(--bg-page-start) 0%, var(--bg-page-mid) 55%, var(--bg-page-end) 100%);
   }
 }
 
@@ -1896,7 +1765,7 @@ label {
   }
 
   .feature-card {
-    background: color-mix(in srgb, var(--card) 96%, var(--page-start));
+    background: color-mix(in srgb, var(--card) 96%, var(--bg-page-start));
     box-shadow: none;
     contain: layout paint;
     transform: translateZ(0);
@@ -1911,12 +1780,16 @@ label {
   }
 }
 
+/* --------------------------------------------------------------------------
+ * Placeholder dashboard (legacy)
+ * -------------------------------------------------------------------------- */
+
 .dashboard-page {
   min-height: 100vh;
   padding: clamp(5.5rem, 8vw, 6.5rem) clamp(1rem, 4vw, 4rem) clamp(2rem, 4vw, 4rem);
   background:
     radial-gradient(circle at top left, rgba(74, 152, 247, 0.24), transparent 30rem),
-    linear-gradient(135deg, var(--page-start) 0%, var(--page-mid) 55%, var(--page-end) 100%);
+    linear-gradient(135deg, var(--bg-page-start) 0%, var(--bg-page-mid) 55%, var(--bg-page-end) 100%);
 }
 
 .dashboard-shell {

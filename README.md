@@ -1,4 +1,8 @@
-# Drawo Workspace
+# Drawo
+
+Multiplayer drawing & guessing game. React/Vite/TypeScript frontend + Go/Gin backend, with Redis + Postgres and a WebSocket realtime layer.
+
+## Repository layout
 
 Drawo is organized as two separate projects inside one repository:
 
@@ -21,12 +25,21 @@ frontend/.env.example
 frontend/docker-compose.yml
 ```
 
+The first time you run a `make` target it auto-copies `.env.example` → `.env`
+(only if `.env` does not exist yet), so your local secrets/settings are never
+clobbered.
+
+## Prerequisites
+
+- **Node.js 20.x** (pinned in `frontend/app/.nvmrc`; if you use nvm run `nvm use`
+  inside `frontend/app/`).
+- **Go 1.23+** for running the backend outside Docker.
+- **Docker + Docker Compose** for containerised runs.
+
 ## Backend with Docker
 
 ```bash
-cd backend
-cp .env.example .env
-docker compose up -d --build
+make backend-up
 ```
 
 Backend API:
@@ -35,45 +48,39 @@ Backend API:
 http://localhost:8080
 ```
 
-
 ## Frontend with Docker
 
 Start the backend first, then:
 
 ```bash
-cd frontend
-cp .env.example .env
-docker compose up -d --build
+make frontend-up
 ```
 
-Frontend:
+Frontend (Nginx, reverse-proxies API/WS/uploads to host:8080):
 
 ```text
 http://localhost:3000
 ```
 
-The frontend Nginx container proxies `/api`, `/api/v1/ws`, and `/uploads` to the backend on the host at port `8080`.
-
 ## Local development without Docker app containers
 
-Backend dev infrastructure terminal:
+Backend dev infrastructure (Postgres + Redis):
 
 ```bash
 make backend-dev-up
 ```
 
-Backend app terminal:
+Backend app (terminal 1):
 
 ```bash
 make backend-serve
 ```
 
-Frontend terminal:
+Frontend (terminal 2):
 
 ```bash
-cd frontend/app
-npm install
-npm run dev
+make frontend-install  # npm install + creates frontend/.env from .env.example if missing
+make frontend-dev      # vite dev server on http://localhost:5173
 ```
 
 Frontend dev server:
@@ -85,15 +92,19 @@ http://localhost:5173
 ## Convenience commands from repository root
 
 ```bash
-make backend-up
+make backend-up            # start backend stack (docker)
 make backend-down
-make backend-dev-up
+make backend-dev-up        # start only Postgres + Redis for local Go dev
 make backend-dev-down
-make backend-serve
-make frontend-up
+make backend-serve         # go run . serve
+make backend-migrate       # go run . migrate
+make frontend-up           # start frontend (docker + nginx)
 make frontend-down
-make frontend-dev
-make test
+make frontend-install      # npm install in frontend/app (creates .env if missing)
+make frontend-dev          # vite dev server
+make backend-test
+make frontend-test
+make test                  # both
 ```
 
 Project-specific instructions:

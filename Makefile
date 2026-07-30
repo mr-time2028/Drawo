@@ -23,19 +23,29 @@ backend-dev-down:
 backend-dev-logs:
 	cd backend && docker compose -f docker-compose-dev.yml logs -f
 
-backend-download:
+# Create backend/.env from the example on first run (idempotent: won't clobber
+# an existing .env the developer has customized).
+backend-env:
+	@test -f backend/.env || (echo "→ Creating backend/.env from .env.example" && cp backend/.env.example backend/.env)
+
+# Create frontend/.env from the example on first run. The Vite dev server reads
+# env from frontend/ (see envDir in vite.config.ts), not frontend/app/.
+frontend-env:
+	@test -f frontend/.env || (echo "→ Creating frontend/.env from .env.example" && cp frontend/.env.example frontend/.env)
+
+backend-download: backend-env
 	cd backend/app && go mod download
 
 backend-tidy:
 	cd backend/app && go mod tidy
 
-backend-migrate:
+backend-migrate: backend-env
 	cd backend/app && go run . migrate
 
-backend-serve:
+backend-serve: backend-env
 	cd backend/app && go run . serve
 
-frontend-up:
+frontend-up: frontend-env
 	cd frontend && docker compose up -d --build
 
 frontend-down:
@@ -44,10 +54,10 @@ frontend-down:
 frontend-logs:
 	cd frontend && docker compose logs -f
 
-frontend-install:
+frontend-install: frontend-env
 	cd frontend/app && npm install
 
-frontend-dev:
+frontend-dev: frontend-env
 	cd frontend/app && npm run dev
 
 backend-test:

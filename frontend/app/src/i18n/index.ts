@@ -4,7 +4,12 @@ import { initReactI18next } from 'react-i18next';
 import { env } from '../config/env';
 import en from './locales/en.json';
 import fa from './locales/fa.json';
-import { defaultLanguage, getLanguageDirection, isSupportedLanguage, type SupportedLanguage } from './languages';
+import {
+  defaultLanguage,
+  getLanguageDirection,
+  isSupportedLanguage,
+  type SupportedLanguage,
+} from './languages';
 
 const LANGUAGE_STORAGE_KEY = 'drawo.language';
 

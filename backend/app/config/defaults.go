@@ -20,7 +20,6 @@ func setDefaults() {
 	viper.SetDefault("app.domain", "http://localhost:8080")
 	viper.SetDefault("app.secretKey", "change-me-in-production")
 	viper.SetDefault("app.migrationsPath", "migrations")
-	viper.SetDefault("app.modules", []string{"user", "auth", "room", "game", "admin"})
 	viper.SetDefault("app.storage.driver", "local")
 	viper.SetDefault("app.storage.endpoint", "localhost:9000")
 	viper.SetDefault("app.storage.accessKey", "admin")

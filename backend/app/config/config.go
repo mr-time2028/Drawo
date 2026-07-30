@@ -31,7 +31,6 @@ type AppConfig struct {
 	Domain         string        `mapstructure:"domain"`
 	SecretKey      string        `mapstructure:"secretKey"`
 	MigrationsPath string        `mapstructure:"migrationsPath"`
-	Modules        []string      `mapstructure:"modules"`
 	Storage        StorageConfig `mapstructure:"storage"`
 }
 

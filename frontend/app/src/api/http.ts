@@ -1,4 +1,4 @@
-import axios, { AxiosError, type AxiosRequestConfig, type Method } from 'axios';
+import axios, { type AxiosError, type AxiosRequestConfig, type Method } from 'axios';
 
 import { env } from '../config/env';
 

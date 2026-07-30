@@ -17,9 +17,9 @@ type Session struct {
 
 // TokenPair is the result of a successful login or refresh.
 type TokenPair struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresIn    int64 // seconds
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
 }
 
 // IsExpired returns true if the current time has passed the session's expiration.

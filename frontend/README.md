@@ -1,85 +1,78 @@
 # Drawo Frontend
 
-The frontend project owns its own Docker Compose file and env example.
+React 18 + TypeScript + Vite single-page application for the Drawo drawing &
+guessing game. Uses `@tanstack/react-router`, Zustand, `react-i18next` (EN + FA
+with full RTL support), and a token-driven light/dark theme.
 
 ```text
 frontend/
-  docker-compose.yml
-  .env.example
+  docker-compose.yml   # Nginx container build
+  .env.example         # copy to .env (auto-done by `make install`)
+  Makefile
   app/
     package.json
+    .nvmrc             # Node 20
+    .npmrc
+    vite.config.ts     # reads env from ../ (i.e. frontend/.env)
     src/
-    Dockerfile
-    nginx.conf
 ```
 
-## Run frontend with Docker
+## First-time setup
 
-Start the backend first. Then from `frontend/`:
+Requires **Node.js 20.x**. If you use `nvm`:
 
 ```bash
-cp .env.example .env
-docker compose up -d --build
+cd frontend/app
+nvm use            # reads .nvmrc
 ```
 
-Open:
-
-```text
-http://localhost:3000
-```
-
-The Nginx container proxies backend traffic to the backend exposed on the host at port `8080`.
-
-## Run frontend locally with npm
-
-From `frontend/`:
+From the repository root:
 
 ```bash
-cp .env.example .env
+make frontend-install     # installs deps + creates frontend/.env from .env.example
+make frontend-dev         # starts vite at http://localhost:5173
+```
+
+Or from inside `frontend/`:
+
+```bash
 make install
 make dev
 ```
 
-Or directly:
+The Vite dev server reads environment variables from `frontend/.env` (**not**
+`frontend/app/.env`). `VITE_API_BASE_URL` and `VITE_WS_URL` default to
+`http://localhost:8080` which matches the backend defaults.
+
+## Scripts
+
+From `frontend/app/`:
+
+| Command                | What it does                                     |
+| ---------------------- | ------------------------------------------------ |
+| `npm run dev`          | Start Vite dev server on :5173                   |
+| `npm run build`        | Typecheck + production build to `app/dist/`      |
+| `npm run preview`      | Preview the production build                     |
+| `npm run typecheck`    | Run `tsc -b`                                     |
+| `npm test`             | Run Vitest suite once                            |
+| `npm run test:watch`   | Run Vitest in watch mode                         |
+| `npm run lint`         | ESLint (flat config, TS/TSX)                     |
+| `npm run lint:fix`     | ESLint with `--fix`                              |
+| `npm run format`       | Prettier write                                   |
+| `npm run format:check` | Prettier check (used in CI)                      |
+
+## Running with Docker
 
 ```bash
-cd app
-npm install
-npm run dev
+make up     # from frontend/, or `make frontend-up` from repo root
 ```
 
-Open:
+The frontend container runs Nginx on `FRONTEND_HTTP_PORT` (default 3000) and
+reverse-proxies `/api`, `/api/v1/ws`, and `/uploads/` to the backend on
+`http://host.docker.internal:8080`.
 
-```text
-http://localhost:5173
-```
+## Dev helpers
 
-## Test
-
-```bash
-make test
-```
-
-## Typecheck
-
-```bash
-make typecheck
-```
-
-## Build
-
-```bash
-make build
-```
-
-## Environment
-
-Only frontend-safe Vite variables belong in `frontend/.env`:
-
-```env
-VITE_API_BASE_URL=http://localhost:8080
-VITE_WS_URL=ws://localhost:8080/api/v1/ws
-VITE_DEFAULT_LANGUAGE=fa
-```
-
-No backend secrets, database values, Redis values, or Swagger values belong in frontend env files.
+- Visit `http://localhost:5173/__dev__` in development for a design-system
+  preview page (button variants, colors, typography, form controls).
+- Append `?mock=1` to dashboard pages during Phase 1–3 to force mock data.

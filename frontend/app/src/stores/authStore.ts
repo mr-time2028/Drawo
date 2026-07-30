@@ -19,6 +19,11 @@ function getInitialAuthState() {
 
 // This store keeps auth tokens for the early frontend build.
 // Later, refresh tokens should move to httpOnly cookies for stronger security.
+//
+// NOTE: The backend /auth/logout call lives in the caller (currently
+// DashboardPage.handleLogout) so that network + state-clearing can be ordered
+// precisely: first POST to the backend while the token is still in state and
+// the component is mounted, THEN clearTokens() and navigate.
 export const useAuthStore = create<AuthState>((set) => ({
   ...getInitialAuthState(),
 

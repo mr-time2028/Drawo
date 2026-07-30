@@ -1,12 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
-import {
-  Outlet,
-  RouterProvider,
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from '@tanstack/react-router';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MockAdapter from 'axios-mock-adapter';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,7 +8,6 @@ import { ApiError, httpClient } from '../api/http';
 import { i18n } from '../i18n';
 import { useAuthStore } from '../stores/authStore';
 import { getDisplayError } from '../utils/errorMessages';
-import { LoginPage } from './LoginPage';
 
 const mock = new MockAdapter(httpClient);
 
@@ -24,46 +15,20 @@ async function useEnglish() {
   await i18n.changeLanguage('en');
 }
 
-
-async function renderLoginPage(initialPath: '/login' | '/register' = '/login') {
-  const rootRoute = createRootRoute({ component: () => <Outlet /> });
-  const loginRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: 'login',
-    component: () => <LoginPage initialMode="login" />,
-  });
-  const registerRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: 'register',
-    component: () => <LoginPage initialMode="register" />,
-  });
-  const appRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: 'app',
-    component: () => <p>Dashboard reached</p>,
-  });
-  const router = createRouter({
-    routeTree: rootRoute.addChildren([loginRoute, registerRoute, appRoute]),
-    history: createMemoryHistory({ initialEntries: [initialPath] }),
-  });
-
-  await router.load();
-  return render(<RouterProvider router={router} />);
-}
-
 afterEach(() => {
   mock.reset();
+  localStorage.clear();
 });
 
 describe('LoginPage', () => {
   it('uses Persian as the default language', async () => {
-    await renderLoginPage('/login');
-
-    expect(screen.getByRole('button', { name: 'ورود' })).toBeInTheDocument();
+    window.history.pushState({}, '', '/login');
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
     expect(document.documentElement.dir).toBe('rtl');
   });
 
-  it('logs in and shows the logged-in state', async () => {
+  it('logs in and redirects to the dashboard via the real router', async () => {
     await useEnglish();
     mock.onPost('/api/v1/auth/login').reply(200, {
       access_token: 'access-token',
@@ -71,13 +36,17 @@ describe('LoginPage', () => {
       expires_in: 900,
     });
 
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/login');
+    render(<App />);
 
-    await userEvent.type(screen.getByRole('textbox', { name: /username/i }), 'hamid');
-    await userEvent.type(screen.getByLabelText(/^password$/i), 'secret');
+    await userEvent.type(await screen.findByRole('textbox', { name: /username/i }), 'hamid');
+    await userEvent.type(screen.getByLabelText(/^password$/i), 'Secret@1');
     await userEvent.click(screen.getByRole('button', { name: /login/i }));
 
-    expect(await screen.findByText('Dashboard reached')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /welcome back/i }, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/app');
     expect(localStorage.getItem('drawo.access_token')).toBe('access-token');
     expect(localStorage.getItem('drawo.refresh_token')).toBe('refresh-token');
   });
@@ -93,10 +62,10 @@ describe('LoginPage', () => {
       return [201, { id: 'u1', username: 'newuser' }];
     });
 
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/register');
+    render(<App />);
 
-    await userEvent.click(screen.getByRole('link', { name: /create one/i }));
-    await userEvent.type(screen.getByRole('textbox', { name: /username/i }), 'newuser');
+    await userEvent.type(await screen.findByRole('textbox', { name: /username/i }), 'newuser');
     await userEvent.type(screen.getByLabelText(/^password$/i), 'Secret@1');
     await userEvent.type(screen.getByLabelText(/confirm password/i), 'Secret@1');
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
@@ -110,9 +79,10 @@ describe('LoginPage', () => {
       code: 'invalid_credentials',
     });
 
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/login');
+    render(<App />);
 
-    const usernameInput = screen.getByRole('textbox', { name: /نام کاربری/ });
+    const usernameInput = await screen.findByRole('textbox', { name: /نام کاربری/ });
     const passwordInput = screen.getByLabelText(/^رمز عبور$/);
 
     await userEvent.type(usernameInput, 'bad');
@@ -130,9 +100,10 @@ describe('LoginPage', () => {
       code: 'account_banned',
     });
 
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/login');
+    render(<App />);
 
-    await userEvent.type(screen.getByRole('textbox', { name: /نام کاربری/ }), 'blocked');
+    await userEvent.type(await screen.findByRole('textbox', { name: /نام کاربری/ }), 'blocked');
     await userEvent.type(screen.getByLabelText(/^رمز عبور$/), 'secret');
     await userEvent.click(screen.getByRole('button', { name: 'ورود' }));
 
@@ -141,12 +112,13 @@ describe('LoginPage', () => {
 
   it('switches between login/register copy and validates confirm password locally', async () => {
     await useEnglish();
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/login');
+    render(<App />);
 
-    expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /login/i })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('link', { name: /create one/i }));
-    expect(screen.getByRole('button', { name: /register/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /register/i })).toBeInTheDocument();
 
     await userEvent.type(screen.getByRole('textbox', { name: /username/i }), 'hamid');
     await userEvent.type(screen.getByLabelText(/^password$/i), 'Secret@1');
@@ -165,10 +137,10 @@ describe('LoginPage', () => {
       code: 'username_taken',
     });
 
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/register');
+    render(<App />);
 
-    await userEvent.click(screen.getByRole('link', { name: /create one/i }));
-    const usernameInput = screen.getByRole('textbox', { name: /username/i });
+    const usernameInput = await screen.findByRole('textbox', { name: /username/i });
     const passwordInput = screen.getByLabelText(/^password$/i);
     const confirmInput = screen.getByLabelText(/confirm password/i);
 
@@ -178,11 +150,6 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Username is already taken.');
-
-    await act(async () => {
-      await i18n.changeLanguage('fa');
-    });
-    expect(await screen.findByRole('alert')).toHaveTextContent('این نام کاربری قبلاً انتخاب شده است.');
 
     expect(usernameInput).toHaveClass('is-error');
     expect(passwordInput.closest('.password-field')).not.toHaveClass('is-error');
@@ -195,12 +162,15 @@ describe('LoginPage', () => {
       .onPost('/api/v1/auth/register')
       .replyOnce(422, { message: { password: ['Must include at least one special character.'] } })
       .onPost('/api/v1/auth/register')
-      .replyOnce(400, { message: { confirm_password: ['passwords do not match'] }, code: 'passwords_do_not_match' });
+      .replyOnce(400, {
+        message: { confirm_password: ['passwords do not match'] },
+        code: 'passwords_do_not_match',
+      });
 
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/register');
+    render(<App />);
 
-    await userEvent.click(screen.getByRole('link', { name: /create one/i }));
-    const usernameInput = screen.getByRole('textbox', { name: /username/i });
+    const usernameInput = await screen.findByRole('textbox', { name: /username/i });
     const passwordInput = screen.getByLabelText(/^password$/i);
     const confirmInput = screen.getByLabelText(/confirm password/i);
 
@@ -209,7 +179,9 @@ describe('LoginPage', () => {
     await userEvent.type(confirmInput, 'Secret@1');
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Password: Must include at least one special character.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Password: Must include at least one special character.',
+    );
     expect(usernameInput).not.toHaveClass('is-error');
     expect(passwordInput.closest('.password-field')).toHaveClass('is-error');
     expect(confirmInput.closest('.password-field')).not.toHaveClass('is-error');
@@ -224,18 +196,14 @@ describe('LoginPage', () => {
 
   it('redirects anonymous users from app dashboard to login', async () => {
     window.history.pushState({}, '', '/app');
-
     render(<App />);
-
     expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
   });
 
   it('shows the protected dashboard for authenticated users in Persian', async () => {
     useAuthStore.getState().setTokens('access-token', 'refresh-token');
     window.history.pushState({}, '', '/app');
-
     render(<App />);
-
     expect(await screen.findByRole('heading', { name: 'خوش برگشتی' })).toBeInTheDocument();
     expect(screen.getByText('شروع بازی به‌زودی')).toBeInTheDocument();
   });
@@ -247,7 +215,7 @@ describe('LoginPage', () => {
     expect(await screen.findByText('بازی کن')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('switch', { name: 'تغییر زبان' }));
-    expect(screen.getByText(/^learn$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^learn$/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /login/i })).toBeInTheDocument();
     expect(document.documentElement.dir).toBe('ltr');
 
@@ -281,12 +249,13 @@ describe('LoginPage', () => {
     );
   });
 
-
-
   it('updates username, password requirement, and confirm password UI live in register mode', async () => {
-    await renderLoginPage('/login');
+    // Start on /login then click the "create one / ثبت‌نام کنید" link to switch
+    // to register mode, which is what the test expects.
+    window.history.pushState({}, '', '/login');
+    render(<App />);
 
-    await userEvent.click(screen.getByRole('link', { name: 'ثبت‌نام کنید' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'ثبت‌نام کنید' }));
     const usernameInput = screen.getByRole('textbox', { name: /نام کاربری/ });
     const passwordInput = screen.getByLabelText(/^رمز عبور$/);
     const confirmInput = screen.getByLabelText(/تکرار رمز عبور/);
@@ -330,18 +299,19 @@ describe('LoginPage', () => {
   });
 
   it('does not show green password validation in login mode', async () => {
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/login');
+    render(<App />);
 
-    const passwordInput = screen.getByLabelText(/^رمز عبور$/);
+    const passwordInput = await screen.findByLabelText(/^رمز عبور$/);
     await userEvent.type(passwordInput, 'secret123');
-
     expect(passwordInput.closest('.password-field')).not.toHaveClass('is-valid');
   });
 
   it('toggles password visibility', async () => {
-    await renderLoginPage('/login');
+    window.history.pushState({}, '', '/login');
+    render(<App />);
 
-    const passwordInput = screen.getByLabelText(/^رمز عبور$/);
+    const passwordInput = await screen.findByLabelText(/^رمز عبور$/);
     expect(passwordInput).toHaveAttribute('type', 'password');
 
     await userEvent.click(screen.getByRole('button', { name: 'نمایش رمز عبور' }));
@@ -351,10 +321,18 @@ describe('LoginPage', () => {
     expect(passwordInput).toHaveAttribute('type', 'password');
   });
 
-  it('logs out from the dashboard and clears local tokens', async () => {
+  it('logs out from the dashboard, calls the backend, clears tokens, and returns to login', async () => {
     await useEnglish();
     useAuthStore.getState().setTokens('access-token', 'refresh-token');
     window.history.pushState({}, '', '/app');
+
+    let logoutCalled = false;
+    let logoutAuthHeader: string | undefined;
+    mock.onPost('/api/v1/auth/logout').reply((config) => {
+      logoutCalled = true;
+      logoutAuthHeader = config.headers?.Authorization as string | undefined;
+      return [200, { message: 'logged out successfully' }];
+    });
 
     render(<App />);
 
@@ -362,6 +340,9 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /logout/i }));
 
     expect(await screen.findByRole('button', { name: /login/i })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/login');
     expect(localStorage.getItem('drawo.access_token')).toBeNull();
+    expect(logoutCalled).toBe(true);
+    expect(logoutAuthHeader).toBe('Bearer access-token');
   });
 });

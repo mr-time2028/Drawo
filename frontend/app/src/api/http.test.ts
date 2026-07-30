@@ -1,7 +1,7 @@
 import MockAdapter from 'axios-mock-adapter';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { apiRequest, ApiError, httpClient } from './http';
+import { apiRequest, type ApiError, httpClient } from './http';
 
 const mock = new MockAdapter(httpClient);
 

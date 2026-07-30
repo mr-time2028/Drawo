@@ -8,10 +8,11 @@ package routes
 import (
 	"os"
 
+	"github.com/gin-gonic/gin"
+
 	"drawo/internal/delivery/http/controllers"
 	"drawo/internal/delivery/http/middlewares"
 	"drawo/internal/infrastructure/di"
-	"github.com/gin-gonic/gin"
 )
 
 // Register adds all application routes to the provided Gin engine.
