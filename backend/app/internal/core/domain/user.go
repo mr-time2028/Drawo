@@ -25,14 +25,14 @@ const (
 //	change frequently. Splitting them reduces lock contention and keeps the
 //	auth path lightweight. They share the same ID (1:1 relationship).
 type User struct {
-	ID           string
-	Username     string
-	PasswordHash string
-	IsActive     bool
-	Status       AccountStatus
-	IsSuperuser  bool
-	BanCount     int        // How many times this user has been banned
-	BannedAt     *time.Time // Timestamp of the most recent ban
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID           string         `json:"id"`
+	Username     string         `json:"username"`
+	PasswordHash string         `json:"-"`
+	IsActive     bool           `json:"is_active"`
+	Status       AccountStatus  `json:"status"`
+	IsSuperuser  bool           `json:"is_superuser"`
+	BanCount     int            `json:"ban_count"`
+	BannedAt     *time.Time     `json:"banned_at"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }

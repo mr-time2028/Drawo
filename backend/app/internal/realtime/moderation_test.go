@@ -53,7 +53,7 @@ func TestNormalizeModerationText(t *testing.T) {
 func TestRoomRejectsBadWordsAndChatSpam(t *testing.T) {
 	repo := &fakeContentRepo{badWords: []domain.BadWord{{Text: "badword", Language: "en"}}}
 	state := &domain.Room{ID: "moderation", State: domain.RoomStatePlaying, Language: "en", CurrentDrawerID: "drawer"}
-	room := NewRoom(state, func(string, string) {}, repo, nil, nil, nil)
+	room := NewRoom(state, func(string, string) {}, nil, repo, nil, nil, nil)
 	client := &Client{ID: "c1", UserID: "guesser", Send: make(chan []byte, 20), Done: make(chan struct{})}
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: client, Timestamp: time.Now()})
 	drainClient(client)

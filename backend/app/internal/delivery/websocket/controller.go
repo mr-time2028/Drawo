@@ -20,8 +20,13 @@ type Controller struct {
 	handler *realtime.Handler
 }
 
-func NewController(cfg config.Config, hub *realtime.Hub, sessions repositories.SessionRepository) *Controller {
-	return &Controller{handler: realtime.NewHandler(cfg, hub, sessions)}
+// NewController wires the WS controller. rooms is the room service (narrow
+// guest-token validation interface) used for guest auth; users is used at
+// WebSocket auth time to stamp the connecting client with its display name
+// (so player_joined events carry a username instead of a blank string). Both
+// are accepted as narrow interfaces to avoid import cycles.
+func NewController(cfg config.Config, hub *realtime.Hub, sessions repositories.SessionRepository, rooms realtime.RoomLookup, users realtime.UserLookup) *Controller {
+	return &Controller{handler: realtime.NewHandler(cfg, hub, sessions, rooms, users)}
 }
 
 // Connect upgrades GET /api/v1/ws to a WebSocket connection.

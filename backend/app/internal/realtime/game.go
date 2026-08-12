@@ -44,7 +44,9 @@ type PlayerState struct {
 	Username           string `json:"username,omitempty"`
 	Score              int64  `json:"score"`
 	IsDrawer           bool   `json:"is_drawer"`
+	IsOwner            bool   `json:"is_owner"`
 	IsOnline           bool   `json:"is_online"`
+	IsGuest            bool   `json:"is_guest,omitempty"`
 	GuessedWord        bool   `json:"guessed_word"`
 	CorrectGuesses     int64  `json:"correct_guesses"`
 	SuccessfulDrawings int64  `json:"successful_drawings"`

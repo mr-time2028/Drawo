@@ -24,7 +24,15 @@ type Container struct {
 	OTPs     repositories.OTPRepository
 	Limiter  services.RateLimiter
 	Hub      *realtime.Hub
+	Repos    Repos
 	Services Services
+}
+
+type Repos struct {
+	User    repositories.UserRepository
+	Room    repositories.RoomRepository
+	Profile repositories.ProfileRepository
+	Content repositories.ContentRepository
 }
 
 type Services struct {
@@ -107,6 +115,12 @@ func NewContainer(cfg config.Config) (*Container, error) {
 		OTPs:     otpRepo,
 		Limiter:  rateLimiter,
 		Hub:      hub,
+		Repos: Repos{
+			User:    userRepo,
+			Room:    roomRepo,
+			Profile: profileRepo,
+			Content: contentRepo,
+		},
 		Services: Services{
 			Auth:    authSvc,
 			User:    userSvc,

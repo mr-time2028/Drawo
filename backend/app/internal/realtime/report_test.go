@@ -35,7 +35,7 @@ func (f *fakeReportRepo) CountRoundReports(ctx context.Context, roomID string, r
 
 func TestRoomReportStoresEvidenceAndRejectsInvalidReports(t *testing.T) {
 	reportRepo := &fakeReportRepo{}
-	room := NewRoom(&domain.Room{ID: "report-room", State: domain.RoomStatePlaying, Language: "en"}, func(string, string) {}, nil, nil, nil, reportRepo)
+	room := NewRoom(&domain.Room{ID: "report-room", State: domain.RoomStatePlaying, Language: "en"}, func(string, string) {}, nil, nil, nil, nil, reportRepo)
 	reporter := &Client{ID: "c1", UserID: "reporter", Send: make(chan []byte, 20), Done: make(chan struct{})}
 	reported := &Client{ID: "c2", UserID: "reported", Send: make(chan []byte, 20), Done: make(chan struct{})}
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: reporter, Timestamp: time.Now()})
@@ -70,7 +70,7 @@ func TestRoomReportStoresEvidenceAndRejectsInvalidReports(t *testing.T) {
 func TestMultipleReportsRecordPenaltyEvent(t *testing.T) {
 	reportRepo := &fakeReportRepo{}
 	profiles := &fakeProfileRepo{profiles: map[string]*domain.Profile{"reported": {UserID: "reported", ReputationScore: 10000}}}
-	room := NewRoom(&domain.Room{ID: "report-room", State: domain.RoomStatePlaying, Language: "en", CurrentRound: 1}, func(string, string) {}, nil, profiles, nil, reportRepo)
+	room := NewRoom(&domain.Room{ID: "report-room", State: domain.RoomStatePlaying, Language: "en", CurrentRound: 1}, func(string, string) {}, nil, nil, profiles, nil, reportRepo)
 	reported := &Client{ID: "reported-c", UserID: "reported", Send: make(chan []byte, 20), Done: make(chan struct{})}
 	reporter1 := &Client{ID: "r1-c", UserID: "r1", Send: make(chan []byte, 20), Done: make(chan struct{})}
 	reporter2 := &Client{ID: "r2-c", UserID: "r2", Send: make(chan []byte, 20), Done: make(chan struct{})}

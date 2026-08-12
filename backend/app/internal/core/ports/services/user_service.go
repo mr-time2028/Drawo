@@ -71,16 +71,45 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, updates 
 		return nil, errors.New(errors.ErrNotFound, "profile not found")
 	}
 
-	// Update only allowed fields
-	profile.AvatarURL = updates.AvatarURL
-	profile.Locale = updates.Locale
-	profile.Theme = updates.Theme
-	profile.BackgroundSound = updates.BackgroundSound
-	profile.ToolSound = updates.ToolSound
-	profile.UpdatedAt = time.Now()
+	changed := false
 
-	if err := s.profileRepo.Update(profile); err != nil {
-		return nil, errors.New(errors.ErrInternalServer, "failed to update profile")
+	// Update only allowed fields. Empty strings for AvatarURL/Email/Phone/Locale
+	// are treated as "not provided" (PATCH semantics).
+	if updates.AvatarURL != "" && updates.AvatarURL != profile.AvatarURL {
+		profile.AvatarURL = updates.AvatarURL
+		changed = true
+	}
+	// When email/phone changes, reset verified status so user must re-verify.
+	if updates.Email != "" && updates.Email != profile.Email {
+		profile.Email = updates.Email
+		profile.EmailVerified = false
+		changed = true
+	}
+	if updates.Phone != "" && updates.Phone != profile.Phone {
+		profile.Phone = updates.Phone
+		profile.PhoneVerified = false
+		changed = true
+	}
+	if updates.Locale != "" && updates.Locale != profile.Locale {
+		profile.Locale = updates.Locale
+		changed = true
+	}
+	// Theme is NOT stored on the profile — the frontend owns it via localStorage.
+	// Bool settings: accept the submitted value (false is meaningful).
+	if profile.BackgroundSound != updates.BackgroundSound {
+		profile.BackgroundSound = updates.BackgroundSound
+		changed = true
+	}
+	if profile.ToolSound != updates.ToolSound {
+		profile.ToolSound = updates.ToolSound
+		changed = true
+	}
+
+	if changed {
+		profile.UpdatedAt = time.Now()
+		if err := s.profileRepo.Update(profile); err != nil {
+			return nil, errors.New(errors.ErrInternalServer, "failed to update profile")
+		}
 	}
 
 	return profile, nil

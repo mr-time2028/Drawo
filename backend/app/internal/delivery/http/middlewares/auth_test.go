@@ -16,6 +16,7 @@ import (
 	"drawo/internal/core/ports/repositories"
 	"drawo/internal/infrastructure/cache"
 	"drawo/internal/infrastructure/di"
+	appErrors "drawo/pkg/errors"
 	"drawo/pkg/security"
 )
 
@@ -123,13 +124,39 @@ func TestAuthMiddlewares(t *testing.T) {
 		acc, _, _ := jwt.GenerateTokenPair(uid, sid, "t1")
 
 		sessionRepo.Set(context.Background(), &domain.Session{ID: sid, UserID: uid, ExpiresAt: time.Now().Add(time.Hour)})
-		userSvc.On("GetProfile", mock.Anything, uid).Return(nil, assert.AnError).Once()
+		// The real service returns AppError(ErrNotFound, "user not found") when
+		// the user has been deleted; the middleware maps that to 401. A generic
+		// (non-AppError) error is treated as 500 (logged as internal error).
+		userSvc.On("GetProfile", mock.Anything, uid).
+			Return(nil, appErrors.New(appErrors.ErrNotFound, "user not found")).
+			Once()
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/auth", nil)
 		req.Header.Set("Authorization", "Bearer "+acc)
 		router.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("UserServiceInfraError", func(t *testing.T) {
+		// If the user service returns an unexpected (non-AppError) error
+		// (e.g. database down), the middleware must respond 500, not 401,
+		// and RespondError logs it to stderr.
+		sid := "s3"
+		uid := "u3"
+		acc, _, _ := jwt.GenerateTokenPair(uid, sid, "t1")
+
+		sessionRepo.Set(context.Background(), &domain.Session{ID: sid, UserID: uid, ExpiresAt: time.Now().Add(time.Hour)})
+		userSvc.On("GetProfile", mock.Anything, uid).Return(nil, assert.AnError).Once()
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/auth", nil)
+		req.Header.Set("Authorization", "Bearer "+acc)
+		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		// Must not leak the internal error text to the client.
+		assert.NotContains(t, w.Body.String(), "assert.AnError")
+		assert.Contains(t, w.Body.String(), "internal server error")
 	})
 
 	t.Run("RequireAdmin_Fail", func(t *testing.T) {

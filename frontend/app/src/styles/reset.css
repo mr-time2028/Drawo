@@ -19,7 +19,12 @@ body,
 
 body {
   min-height: 100vh;
-  background: linear-gradient(135deg, var(--bg-page-start) 0%, var(--bg-page-mid) 55%, var(--bg-page-end) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--bg-page-start) 0%,
+    var(--bg-page-mid) 55%,
+    var(--bg-page-end) 100%
+  );
   color: var(--ink);
   font-size: var(--fs-md);
   line-height: 1.55;

@@ -17,6 +17,18 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    proxy: {
+      // Proxy REST API + WebSocket to the Go backend on :8080 in dev. This
+      // means the frontend can use same-origin URLs (/api/v1/...) and there
+      // are zero CORS headaches during local development (bookmarkable
+      // invite URLs opened in a fresh tab, browser extensions interfering
+      // with preflight, etc.).
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
   },
   test: {
     environment: 'jsdom',

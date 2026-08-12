@@ -11,10 +11,16 @@ import (
 	"drawo/internal/core/domain"
 )
 
+// Guest-token TTL is mirrored from the service layer (services.guestTokenTTL)
+// so the ephemeral repo can set Redis expiry without a circular import. The
+// two values MUST stay in sync: 24 hours.
+const guestTokenTTL = 24 * time.Hour
+
 const (
 	roomKeyPrefix   = "room:"
 	inviteKeyPrefix = "invite:"
 	publicRoomsKey  = "rooms:public:"
+	guestKeyPrefix  = "guest:"
 	roomDefaultTTL  = 24 * time.Hour
 )
 
@@ -24,6 +30,11 @@ type RoomRepository interface {
 	GetByInviteCode(ctx context.Context, inviteCode string) (*domain.Room, error)
 	Delete(ctx context.Context, id string, inviteCode string) error
 	ListPublic(ctx context.Context, language string, paging domain.Paging) (*domain.PageOf[domain.Room], error)
+
+	// Guest tokens are short-lived, room-bound tokens for anonymous players.
+	SaveGuest(ctx context.Context, g *domain.GuestAuth) error
+	GetGuest(ctx context.Context, token string) (*domain.GuestAuth, error)
+	DeleteGuest(ctx context.Context, token string) error
 }
 
 type ephemeralRoomRepo struct {
@@ -81,4 +92,31 @@ func (r *ephemeralRoomRepo) Delete(ctx context.Context, id string, inviteCode st
 
 func (r *ephemeralRoomRepo) ListPublic(ctx context.Context, language string, paging domain.Paging) (*domain.PageOf[domain.Room], error) {
 	return &domain.PageOf[domain.Room]{Items: []domain.Room{}, Total: 0, Limit: paging.Limit, Offset: paging.Offset}, nil
+}
+
+func (r *ephemeralRoomRepo) SaveGuest(ctx context.Context, g *domain.GuestAuth) error {
+	if g == nil || g.Token == "" {
+		return errors.New("invalid guest: token required")
+	}
+	data, _ := json.Marshal(g)
+	return r.cache.Set(ctx, guestKeyPrefix+g.Token, string(data), guestTokenTTL)
+}
+
+func (r *ephemeralRoomRepo) GetGuest(ctx context.Context, token string) (*domain.GuestAuth, error) {
+	data, err := r.cache.Get(ctx, guestKeyPrefix+token)
+	if err != nil || data == "" {
+		return nil, nil
+	}
+	var g domain.GuestAuth
+	if err := json.Unmarshal([]byte(data), &g); err != nil {
+		return nil, nil
+	}
+	if time.Now().After(g.ExpiresAt) {
+		return nil, nil
+	}
+	return &g, nil
+}
+
+func (r *ephemeralRoomRepo) DeleteGuest(ctx context.Context, token string) error {
+	return r.cache.Delete(ctx, guestKeyPrefix+token)
 }

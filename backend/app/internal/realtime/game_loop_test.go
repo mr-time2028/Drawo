@@ -41,7 +41,7 @@ func (r *fakeProfileRepo) Update(profile *domain.Profile) error {
 
 func newGameTestRoom(profileRepo *fakeProfileRepo) (*Room, *Client, *Client) {
 	state := &domain.Room{ID: "game-room", Type: domain.RoomTypePublic, Language: "en", State: domain.RoomStateLobby, MinPlayers: 2, MaxPlayers: 8, RoundTime: 30, MaxRounds: 1}
-	room := NewRoom(state, func(string, string) {}, nil, profileRepo, nil, nil)
+	room := NewRoom(state, func(string, string) {}, nil, nil, profileRepo, nil, nil)
 	drawer := &Client{ID: "drawer-conn", UserID: "drawer", Username: "Alice", Send: make(chan []byte, 50), Done: make(chan struct{})}
 	guesser := &Client{ID: "guesser-conn", UserID: "guesser", Username: "Bob", Send: make(chan []byte, 50), Done: make(chan struct{})}
 	return room, drawer, guesser
@@ -72,6 +72,18 @@ func TestGameLoopStartsWhenEnoughPlayersAndHandlesCorrectGuess(t *testing.T) {
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: drawer, Timestamp: time.Now()})
 	assert.Equal(t, GameStateWaitingForPlayers, room.gameState)
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: guesser, Timestamp: time.Now()})
+	// Lobby stays in "waiting" until owner explicitly starts the game
+	// (previously the 2nd join auto-started the countdown which caused all
+	// the invite-link bugs — third players couldn't join, rooms ended
+	// automatically, etc.)
+	assert.Equal(t, GameStateWaitingForPlayers, room.gameState)
+
+	// Owner (drawer is the first player and thus the owner in this test
+	// since state.OwnerID is empty → first joiner isn't marked owner, but
+	// we directly invoke startCountdown here to drive the loop forward.
+	room.state.OwnerID = drawer.UserID
+	startPayload, _ := json.Marshal(map[string]string{"event": "start"})
+	room.handleEvent(&RoomEvent{Type: EventGame, Client: drawer, Payload: startPayload, Timestamp: time.Now()})
 	assert.Equal(t, GameStateCountdown, room.gameState)
 
 	room.handleTimer()
@@ -104,9 +116,12 @@ func TestGameLoopStartsWhenEnoughPlayersAndHandlesCorrectGuess(t *testing.T) {
 
 func TestDrawerCannotChatDuringDrawing(t *testing.T) {
 	room, drawer, guesser := newGameTestRoom(nil)
+	room.state.OwnerID = drawer.UserID
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: drawer, Timestamp: time.Now()})
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: guesser, Timestamp: time.Now()})
-	room.startWordSelection()
+	startPayload, _ := json.Marshal(map[string]string{"event": "start"})
+	room.handleEvent(&RoomEvent{Type: EventGame, Client: drawer, Payload: startPayload, Timestamp: time.Now()})
+	room.handleTimer() // countdown -> word selection
 	room.chooseWord(room.suggestedWords[0].GroupID)
 	drainClient(drawer)
 
@@ -130,9 +145,12 @@ func TestAbandoningActiveGameDecreasesReputation(t *testing.T) {
 		"guesser": {UserID: "guesser", ReputationScore: 10000},
 	}}
 	room, drawer, guesser := newGameTestRoom(profiles)
+	room.state.OwnerID = drawer.UserID
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: drawer, Timestamp: time.Now()})
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: guesser, Timestamp: time.Now()})
-	room.startWordSelection()
+	startPayload, _ := json.Marshal(map[string]string{"event": "start"})
+	room.handleEvent(&RoomEvent{Type: EventGame, Client: drawer, Payload: startPayload, Timestamp: time.Now()})
+	room.handleTimer() // countdown -> word selection
 	room.chooseWord(room.suggestedWords[0].GroupID)
 
 	room.handleEvent(&RoomEvent{Type: EventLeave, Client: drawer, Timestamp: time.Now()})
@@ -144,7 +162,7 @@ func TestAbandoningActiveGameDecreasesReputation(t *testing.T) {
 }
 
 func TestSameUserSecondSocketReplacesOldSocket(t *testing.T) {
-	room := NewRoom(&domain.Room{ID: "dup-room", State: domain.RoomStateLobby}, func(string, string) {}, nil, nil, nil, nil)
+	room := NewRoom(&domain.Room{ID: "dup-room", State: domain.RoomStateLobby}, func(string, string) {}, nil, nil, nil, nil, nil)
 	first := &Client{ID: "first", UserID: "u1", Send: make(chan []byte, 10), Done: make(chan struct{})}
 	second := &Client{ID: "second", UserID: "u1", Send: make(chan []byte, 10), Done: make(chan struct{})}
 
@@ -168,7 +186,7 @@ func TestPrivateGameDoesNotApplyPositiveReputationRewards(t *testing.T) {
 		"p1": {UserID: "p1", ReputationScore: 10000},
 		"p2": {UserID: "p2", ReputationScore: 10000},
 	}}
-	room := NewRoom(&domain.Room{ID: "private-room", Type: domain.RoomTypePrivate, State: domain.RoomStatePlaying, Language: "en", MaxRounds: 1}, func(string, string) {}, nil, profiles, nil, nil)
+	room := NewRoom(&domain.Room{ID: "private-room", Type: domain.RoomTypePrivate, State: domain.RoomStatePlaying, Language: "en", MaxRounds: 1}, func(string, string) {}, nil, nil, profiles, nil, nil)
 	p1 := &Client{ID: "c1", UserID: "p1", Send: make(chan []byte, 10), Done: make(chan struct{})}
 	p2 := &Client{ID: "c2", UserID: "p2", Send: make(chan []byte, 10), Done: make(chan struct{})}
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: p1, Timestamp: time.Now()})

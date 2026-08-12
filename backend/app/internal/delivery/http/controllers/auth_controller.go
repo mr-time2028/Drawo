@@ -54,8 +54,7 @@ func (ctrl *AuthController) Register(c *gin.Context) {
 	// 3. Call Service
 	user, err := ctrl.authSvc.Register(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -88,8 +87,7 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 	// Call Service (Logic for Single Device Policy is inside here)
 	tokens, err := ctrl.authSvc.Login(c.Request.Context(), req.Username, req.Password, ip, ua)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -113,8 +111,7 @@ func (ctrl *AuthController) Refresh(c *gin.Context) {
 
 	tokens, err := ctrl.authSvc.Refresh(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 

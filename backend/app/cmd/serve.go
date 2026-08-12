@@ -58,18 +58,12 @@ func serve() error {
 }
 
 // server wraps the Gin engine and net/http server for the `serve` command.
-//
-// This lives in cmd because starting/stopping the HTTP process is application
-// bootstrap behavior. The delivery layer still owns controllers, middleware,
-// and route registration; cmd only wires those adapters into an executable
-// server process.
 type server struct {
 	httpServer *http.Server
 }
 
 // newServer creates a configured Gin server with all routes registered.
 func newServer(cfg config.ServerConfig, container *di.Container) *server {
-	// Release mode hides stack traces from HTTP responses.
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
@@ -80,14 +74,18 @@ func newServer(cfg config.ServerConfig, container *di.Container) *server {
 		httpServer: &http.Server{
 			Addr:    fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
 			Handler: router,
+			// Generous timeouts so WebSocket upgrades don't hit the default
+			// zero-value (which causes i/o timeout errors like
+			// "read tcp [::1]:8080->[::1]:xxxxx: i/o timeout" on slow
+			// connections or during the auth handshake).
+			ReadHeaderTimeout: 20 * time.Second,
+			ReadTimeout:       0, // 0 = no deadline; long-lived WS connections require this.
+			WriteTimeout:      0,
+			IdleTimeout:       120 * time.Second,
 		},
 	}
 }
 
-// run starts the server and blocks until it is shut down.
-//
-// It listens for SIGINT/SIGTERM and performs a graceful shutdown with a
-// 5-second timeout.
 func (s *server) run() error {
 	go func() {
 		logger.L.Info("starting http server", slog.String("addr", s.httpServer.Addr))

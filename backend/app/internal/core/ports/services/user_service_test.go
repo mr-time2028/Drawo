@@ -55,7 +55,7 @@ func TestUserService_Profile(t *testing.T) {
 	assert.Equal(t, "alice", up.User.Username)
 
 	// 2. Update Profile
-	updates := domain.Profile{AvatarURL: "new_url", Theme: "dark"}
+	updates := domain.Profile{AvatarURL: "new_url", Locale: "en"}
 	p, err := svc.UpdateProfile(ctx, userID, updates)
 	require.NoError(t, err)
 	assert.Equal(t, "new_url", p.AvatarURL)

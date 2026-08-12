@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '@/components/ui/Avatar';
+import { updateProfile } from '@/api/user';
 import { isSupportedLanguage, type SupportedLanguage } from '@/i18n/languages';
+import { persistLanguage } from '@/i18n';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 
@@ -19,10 +21,25 @@ export function AppControls() {
   const isLanding = pathname === '/';
   const isOnDashboard = pathname.startsWith('/app');
   const [mobileMenuIsOpen, setMobileMenuIsOpen] = useState(false);
+  const [langSyncing, setLangSyncing] = useState(false);
 
   function toggleLanguage() {
     const nextLanguage: SupportedLanguage = isPersian ? 'en' : 'fa';
+    // Apply locally instantly for a snappy UX (persistLanguage updates dir
+    // attribute and localStorage; i18n.changeLanguage swaps strings).
+    persistLanguage(nextLanguage);
     void i18n.changeLanguage(nextLanguage);
+    // Sync to the backend when authenticated. This is best-effort: a failure
+    // doesn't revert the local change because localStorage is the boot cache
+    // and the next /profile load will re-reconcile.
+    if (accessToken && !langSyncing) {
+      setLangSyncing(true);
+      updateProfile({ locale: nextLanguage })
+        .catch((err) => {
+          console.warn('[i18n] failed to persist locale on server:', err);
+        })
+        .finally(() => setLangSyncing(false));
+    }
   }
 
   function closeMobileMenu() {

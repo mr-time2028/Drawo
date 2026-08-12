@@ -15,10 +15,21 @@ type FrontendEnv = {
 function readEnv(): FrontendEnv {
   const raw = import.meta.env;
 
-  const apiBaseUrl = raw.VITE_API_BASE_URL || 'http://localhost:8080';
-  // If WS URL is not provided in Docker/proxy setups, derive it from the current origin.
+  // Default: same-origin. In `npm run dev` this hits the Vite proxy
+  // (configured below in vite.config.ts → http://localhost:8080). In Docker
+  // or production Nginx, /api is reverse-proxied at the edge. Override with
+  // VITE_API_BASE_URL only if you need to point at a different host.
+  const apiBaseUrl = raw.VITE_API_BASE_URL || '';
+  // If WS URL is not provided, derive it from the current origin — this
+  // matches the dev proxy and production Nginx paths. If VITE_API_BASE_URL
+  // is set explicitly, derive WS from that too.
+  const explicit = typeof raw.VITE_API_BASE_URL === 'string' && raw.VITE_API_BASE_URL ? raw.VITE_API_BASE_URL : '';
+  const derivedFromApi = explicit
+    ? `${explicit.replace(/^http/, 'ws')}/api/v1/ws`
+    : null;
   const wsUrl =
     raw.VITE_WS_URL ||
+    derivedFromApi ||
     (typeof window !== 'undefined'
       ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api/v1/ws`
       : 'ws://localhost:8080/api/v1/ws');

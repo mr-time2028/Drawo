@@ -29,8 +29,7 @@ func (ctrl *UserController) GetProfile(c *gin.Context) {
 
 	profile, err := ctrl.userSvc.GetProfile(c.Request.Context(), userID)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -38,10 +37,12 @@ func (ctrl *UserController) GetProfile(c *gin.Context) {
 }
 
 // UpdateProfileRequest defines editable fields.
+// Note: theme is intentionally absent — it is owned by the frontend via localStorage.
 type UpdateProfileRequest struct {
 	AvatarURL       string `json:"avatar_url"`
+	Email           string `json:"email" validate:"omitempty,email"`
+	Phone           string `json:"phone" validate:"omitempty,min=5,max=20"`
 	Locale          string `json:"locale" validate:"omitempty,len=2"`
-	Theme           string `json:"theme" validate:"omitempty,oneof=light dark"`
 	BackgroundSound bool   `json:"background_sound"`
 	ToolSound       bool   `json:"tool_sound"`
 }
@@ -63,16 +64,16 @@ func (ctrl *UserController) UpdateProfile(c *gin.Context) {
 
 	updates := domain.Profile{
 		AvatarURL:       req.AvatarURL,
+		Email:           req.Email,
+		Phone:           req.Phone,
 		Locale:          req.Locale,
-		Theme:           req.Theme,
 		BackgroundSound: req.BackgroundSound,
 		ToolSound:       req.ToolSound,
 	}
 
 	updated, err := ctrl.userSvc.UpdateProfile(c.Request.Context(), userID, updates)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -100,8 +101,7 @@ func (ctrl *UserController) ChangeUsername(c *gin.Context) {
 	}
 
 	if err := ctrl.userSvc.ChangeUsername(c.Request.Context(), userID, req.Username); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -124,8 +124,7 @@ func (ctrl *UserController) RequestVerification(c *gin.Context) {
 	}
 
 	if err := ctrl.userSvc.RequestVerification(c.Request.Context(), userID, req.Type); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -149,8 +148,7 @@ func (ctrl *UserController) ConfirmVerification(c *gin.Context) {
 	}
 
 	if err := ctrl.userSvc.ConfirmVerification(c.Request.Context(), userID, req.Code, req.Type); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 

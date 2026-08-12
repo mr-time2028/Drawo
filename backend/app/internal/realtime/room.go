@@ -25,6 +25,7 @@ type Room struct {
 	inbox   chan *RoomEvent
 	onClose func(roomID, inviteCode string)
 
+	roomRepo     repositories.RoomRepository
 	contentRepo  repositories.ContentRepository
 	reputation   *reputationLedger
 	reportRepo   repositories.ReportRepository
@@ -60,18 +61,29 @@ type Room struct {
 	chatHistory []ChatPayload
 }
 
-func NewRoom(state *domain.Room, onClose func(string, string), contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, reportRepo repositories.ReportRepository, extraRepos ...interface{}) *Room {
+func NewRoom(state *domain.Room, onClose func(string, string), roomRepo repositories.RoomRepository, contentRepo repositories.ContentRepository, profileRepo repositories.ProfileRepository, reputationRepo repositories.ReputationRepository, reportRepo repositories.ReportRepository, extraRepos ...interface{}) *Room {
+	// Snap the game state to whatever Redis says: if REST already flipped the
+	// room to "playing" (e.g. the POST /start endpoint) we skip the lobby and
+	// drop straight into the countdown. The countdown treats CurrentRound=0
+	// as "pre-first-round" and bumps to 1 on the word-selection tick, so we
+	// normalize REST's "1" sentinel down to 0.
+	initialGameState := GameStateWaitingForPlayers
+	if state != nil && state.State == domain.RoomStatePlaying {
+		initialGameState = GameStateCountdown
+		state.CurrentRound = 0
+	}
 	return &Room{
 		state:        state,
 		clients:      make(map[string]*Client),
 		inbox:        make(chan *RoomEvent, 512),
 		onClose:      onClose,
+		roomRepo:     roomRepo,
 		contentRepo:  contentRepo,
 		reputation:   newReputationLedger(profileRepo, reputationRepo, state.ID, extraRepos...),
 		reportRepo:   reportRepo,
 		reportKeys:   make(map[string]struct{}),
 		roundReports: make(map[string]map[string]struct{}),
-		gameState:    GameStateWaitingForPlayers,
+		gameState:    initialGameState,
 		players:      make(map[string]*PlayerState),
 		canvasOps:    make([]DrawOperation, 0, 256),
 		redoOps:      make(map[string][]DrawOperation),
@@ -396,21 +408,29 @@ func (r *Room) handleJoin(client *Client) {
 		}
 	}
 	r.clients[client.ID] = client
+	isGuest := domain.IsGuestID(client.UserID)
 	if player == nil {
-		player = &PlayerState{UserID: client.UserID, Username: client.Username, Score: 0, IsOnline: true, ClientID: client.ID, JoinedAt: time.Now().Unix()}
+		player = &PlayerState{UserID: client.UserID, Username: client.Username, Score: 0, IsOnline: true, IsOwner: client.UserID == r.state.OwnerID, IsGuest: isGuest, ClientID: client.ID, JoinedAt: time.Now().Unix()}
 		r.players[client.UserID] = player
 		r.playerOrder = append(r.playerOrder, client.UserID)
 	} else {
-		if player.Abandoned {
-			r.sendError(client, errors.WSErrReconnectExpired, "reconnect window expired")
-			return
+		// Refresh transient flags on reconnect (owner may have changed; guest
+		// flag is a property of the userID prefix so it never flips).
+		player.IsOwner = client.UserID == r.state.OwnerID
+		player.IsGuest = isGuest
+		if player.Username == "" && client.Username != "" {
+			player.Username = client.Username
 		}
-		isReconnect = !player.IsOnline
-		player.IsOnline = true
-		player.ClientID = client.ID
-		player.DisconnectedAt = 0
-		player.ReconnectDeadline = 0
 	}
+	if player.Abandoned {
+		r.sendError(client, errors.WSErrReconnectExpired, "reconnect window expired")
+		return
+	}
+	isReconnect = !player.IsOnline
+	player.IsOnline = true
+	player.ClientID = client.ID
+	player.DisconnectedAt = 0
+	player.ReconnectDeadline = 0
 	if isReconnect {
 		r.broadcastSystemExcept(client.ID, EventPlayerReconnected, PlayerEventPayload{UserID: player.UserID, Username: player.Username})
 	} else {
@@ -422,9 +442,14 @@ func (r *Room) handleJoin(client *Client) {
 	r.sendSystem(client, EventCanvasSync, CanvasSyncPayload{Operations: append([]DrawOperation(nil), r.canvasOps...), ServerSeq: r.drawSeq})
 	r.sendSystem(client, EventJoined, JoinedPayload{RoomID: r.state.ID, State: r.gameState})
 	r.broadcastGameState()
-	if r.gameState == GameStateWaitingForPlayers && r.onlinePlayerCount() >= r.minPlayers() {
-		r.startCountdown()
-	}
+	// NOTE: We intentionally DO NOT auto-start the countdown when minPlayers
+	// is reached. The owner explicitly presses "Start Match" (handleGameEvent "start"),
+	// which transitions to countdown. Auto-starting here flipped state to "playing"
+	// immediately after the 2nd player joined, which:
+	//   (a) blocked further invite joins (invite page requires state == "lobby"),
+	//   (b) started drawing rounds with only 2 players before the owner was ready,
+	//   (c) drove the game to GameStateGameEnd without anyone interacting and
+	//       caused the room to be garbage-collected as "finished" shortly after.
 }
 
 func (r *Room) handleLeave(client *Client) {
@@ -432,6 +457,24 @@ func (r *Room) handleLeave(client *Client) {
 		delete(r.clients, client.ID)
 		delete(r.drawLimits, client.ID)
 		closeClientSend(existing)
+	} else {
+		// This client was already removed from r.clients — which happens when
+		// a newer socket for the same user replaced it (see handleJoin's
+		// duplicate-tab path that closeClientSend()s the old client). When the
+		// old socket's readPump eventually returns and dispatches this leave,
+		// the player is already happily connected under a new ClientID.
+		// If we proceeded we would incorrectly mark the player offline, clear
+		// their ClientID, schedule a reconnect timer, and broadcast
+		// player_left even though the user is right there in the lobby — which
+		// is what caused "owner gets kicked out when a friend joins on the
+		// same account / same browser tab refresh" ghost behaviour.
+		//
+		// Only proceed with leave-side effects if the player is still attached
+		// to THIS exact client (i.e. we are the active socket).
+		player := r.players[client.UserID]
+		if player == nil || player.ClientID != client.ID {
+			return
+		}
 	}
 	player := r.players[client.UserID]
 	if player != nil {
@@ -586,6 +629,27 @@ func (r *Room) handleGameEvent(e *RoomEvent) {
 		return
 	}
 	switch base.Event {
+	case "start":
+		// Owner manually kicks off the countdown while still in the lobby. The
+		// countdown itself enforces min-players, so we do not duplicate the
+		// check here — but we do require ownership and lobby state.
+		if r.gameState != GameStateWaitingForPlayers {
+			r.sendError(e.Client, errors.WSErrUnsupportedGameEvent, "game already in progress")
+			return
+		}
+		if e.Client.UserID != r.state.OwnerID {
+			r.sendError(e.Client, errors.WSErrUnsupportedGameEvent, "only the room owner can start the game")
+			return
+		}
+		if r.onlinePlayerCount() < r.minPlayers() {
+			r.sendError(e.Client, errors.WSErrUnsupportedGameEvent, "need at least 2 players to start")
+			return
+		}
+		// Persist the transition so late joiners/reconnects see "playing".
+		r.state.State = domain.RoomStatePlaying
+		r.state.CurrentRound = 0 // startWordSelection bumps this to 1 on its first tick.
+		_ = r.persist()
+		r.startCountdown()
 	case "choose_word":
 		var payload ChooseWordPayload
 		if err := json.Unmarshal(e.Payload, &payload); err != nil {
@@ -609,8 +673,24 @@ func (r *Room) handleGameEvent(e *RoomEvent) {
 	}
 }
 
+// persist best-effort flushes r.state back to the room repository. The
+// in-memory room is the source of truth during play; the worst case is a
+// transient cache miss that resolves on the next state change.
+func (r *Room) persist() error {
+	if r.roomRepo == nil || r.state == nil {
+		return nil
+	}
+	r.state.UpdatedAt = time.Now()
+	return r.roomRepo.Save(context.Background(), r.state)
+}
+
 func (r *Room) startCountdown() {
 	r.gameState = GameStateCountdown
+	r.state.State = domain.RoomStatePlaying
+	if r.state.CurrentRound <= 0 {
+		r.state.CurrentRound = 0 // startWordSelection bumps to 1 on first tick.
+	}
+	_ = r.persist()
 	r.clearTimer()
 	r.setTimer(countdownDuration)
 	r.broadcastGameState()
@@ -743,28 +823,70 @@ func (r *Room) pickDrawer() {
 }
 
 func (r *Room) loadWordSuggestions() []WordCandidate {
-	if len(r.state.CustomWords) > 0 {
-		out := make([]WordCandidate, 0, len(r.state.CustomWords))
-		for i, word := range r.state.CustomWords {
-			if strings.TrimSpace(word) == "" {
-				continue
-			}
-			out = append(out, WordCandidate{GroupID: fmt.Sprintf("custom-%d", i), Text: word, Points: defaultWordPoints})
-			if len(out) >= defaultSuggestedWords {
-				break
-			}
-		}
-		if len(out) > 0 {
-			return out
-		}
+	if r.state.WordSource == domain.WordSourceCustom && len(r.state.CustomCategories) > 0 {
+		return pickCustomWordCandidates(r.state.CustomCategories, defaultSuggestedWords)
 	}
 	if r.contentRepo != nil {
-		words, err := r.contentRepo.GetRandomWordGroups(context.Background(), r.state.CategoryID, r.state.Language, defaultSuggestedWords)
+		category := r.state.CategoryID
+		words, err := r.contentRepo.GetRandomWordGroups(context.Background(), category, r.state.Language, defaultSuggestedWords)
 		if err == nil && len(words) > 0 {
 			return wordCandidatesFromDomain(words)
 		}
 	}
 	return fallbackWords(r.state.Language)
+}
+
+// pickCustomWordCandidates samples random words from custom categories,
+// weighting 1-point words more heavily than 3-point words to mirror the
+// distribution used in public matches.
+func pickCustomWordCandidates(cats []domain.CustomCategory, want int) []WordCandidate {
+	type entry struct {
+		text   string
+		points int
+	}
+	var bag []entry
+	for ci, c := range cats {
+		for tier, words := range c.Words {
+			weight := 4 - tier // tier 1→3 copies, 2→2, 3→1
+			if weight < 1 {
+				weight = 1
+			}
+			for _, w := range words {
+				w = strings.TrimSpace(w)
+				if w == "" {
+					continue
+				}
+				for i := 0; i < weight; i++ {
+					bag = append(bag, entry{text: w, points: tier})
+				}
+			}
+			_ = ci
+		}
+	}
+	if len(bag) == 0 {
+		return nil
+	}
+	out := make([]WordCandidate, 0, want)
+	seen := map[string]bool{}
+	// Simple Fisher-Yates-ish pick up to want unique words. We mutate a copy.
+	pool := append([]entry(nil), bag...)
+	for len(pool) > 0 && len(out) < want {
+		n := len(pool)
+		idx := 0
+		if n > 1 {
+			// Intn is safe here; avoid importing math/rand just for visual shuffle.
+			idx = int(time.Now().UnixNano()%int64(n)+int64(len(out))) % n
+		}
+		e := pool[idx]
+		pool = append(pool[:idx], pool[idx+1:]...)
+		k := strings.ToLower(e.text)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, WordCandidate{GroupID: fmt.Sprintf("custom-%s", k), Text: e.text, Points: e.points})
+	}
+	return out
 }
 
 func (r *Room) sendWordSuggestions() {
@@ -896,6 +1018,25 @@ func (r *Room) isActiveGameState() bool {
 func (r *Room) handleReconnectTimer(force bool) bool {
 	r.markExpiredDisconnects(force)
 	if len(r.clients) == 0 {
+		// A room in the lobby (waiting for players, game never started)
+		// should NOT be garbage-collected just because the owner refreshed
+		// the page or closed the tab for a moment. Destroying it here made
+		// invite links return "room not found" seconds after creation and
+		// kicked the owner out on refresh. The lobby is kept in cache until
+		// the process restarts (ephemeral) or the owner explicitly closes
+		// it.
+		//
+		// Once the game has actually started ("playing") or finished
+		// ("finished"/"closed"), an empty room means the match is over or
+		// abandoned and we can tear the goroutine down and delete the
+		// record. The defer in Run() will close clients, persist stats,
+		// and call onRoomClosed to evict from cache.
+		if r.state.State == domain.RoomStateLobby {
+			r.clearTimer()
+			r.reconnectTimer = nil
+			r.reconnectTimerC = nil
+			return true
+		}
 		r.state.State = domain.RoomStateFinished
 		r.reputation.flush()
 		return false
@@ -957,7 +1098,7 @@ func (r *Room) isRankedGame() bool {
 	// Public dictionary games are ranked. Private rooms and custom-word games are
 	// still playable and should be stored in history, but they must not farm global
 	// score/stat/reputation rewards.
-	return r.state.Type == domain.RoomTypePublic && len(r.state.CustomWords) == 0
+	return r.state.Type == domain.RoomTypePublic && r.state.WordSource != domain.WordSourceCustom
 }
 
 func displayName(player *PlayerState) string {

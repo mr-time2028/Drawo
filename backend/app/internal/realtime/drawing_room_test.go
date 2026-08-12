@@ -12,7 +12,7 @@ import (
 )
 
 func testRoomForDrawing(currentDrawerID string) (*Room, *Client, *Client) {
-	room := NewRoom(&domain.Room{ID: "draw-room", State: domain.RoomStatePlaying, CurrentDrawerID: currentDrawerID}, func(string, string) {}, nil, nil, nil, nil)
+	room := NewRoom(&domain.Room{ID: "draw-room", State: domain.RoomStatePlaying, CurrentDrawerID: currentDrawerID}, func(string, string) {}, nil, nil, nil, nil, nil)
 	drawer := &Client{ID: "drawer-conn", UserID: "drawer", Send: make(chan []byte, 50), Done: make(chan struct{})}
 	guesser := &Client{ID: "guesser-conn", UserID: "guesser", Send: make(chan []byte, 50), Done: make(chan struct{})}
 	room.handleEvent(&RoomEvent{Type: EventJoin, Client: drawer, Timestamp: time.Now()})

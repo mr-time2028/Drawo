@@ -46,7 +46,7 @@ func newWSTestEnv(t *testing.T) *wsTestEnv {
 	sessions := repositories.NewSessionRepo(cacheClient)
 	roomRepo := repositories.NewRoomRepo(cacheClient)
 	hub := NewHub(roomRepo)
-	handler := NewHandler(cfg, hub, sessions)
+	handler := NewHandler(cfg, hub, sessions, nil, nil)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
@@ -299,7 +299,7 @@ func newWSTestEnvWithAccessExpiry(t *testing.T, accessExpiry time.Duration) *wsT
 	sessions := repositories.NewSessionRepo(cacheClient)
 	roomRepo := repositories.NewRoomRepo(cacheClient)
 	hub := NewHub(roomRepo)
-	handler := NewHandler(cfg, hub, sessions)
+	handler := NewHandler(cfg, hub, sessions, nil, nil)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 

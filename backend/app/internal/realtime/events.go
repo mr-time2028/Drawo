@@ -53,8 +53,14 @@ type MessageEnvelope struct {
 // AuthPayload is used for both the first auth frame and later re-auth frames.
 // Tokens are sent inside the WebSocket body instead of query params to avoid
 // leaking credentials in access logs.
+//
+// A client can authenticate either as a registered user (AccessToken) or as an
+// anonymous guest (GuestToken, issued by POST /rooms/by-code/:code/join). A
+// guest token is short-lived and room-bound: the server will reject JoinPayload
+// that targets a different room.
 type AuthPayload struct {
 	AccessToken string `json:"access_token"`
+	GuestToken  string `json:"guest_token"`
 }
 
 // AuthOKPayload confirms initial authentication or socket re-authentication.
@@ -93,16 +99,22 @@ type AuthRequiredPayload struct {
 
 // AuthContext is the trusted identity attached to a WebSocket after auth.
 //
-// It is mutable only for re-authentication: the player may refresh HTTP tokens
-// while still in the game, then send a new access token on this socket. The mutex
-// prevents races between the read pump updating expiry and the session monitor
-// checking expiry.
+// It is mutable only for re-authentication (registered users can refresh HTTP
+// tokens while still in the game). The mutex prevents races between the read
+// pump updating expiry and the session monitor checking expiry.
+//
+// IsGuest distinguishes anonymous players (joined via invite link without an
+// account) from registered users. Guests have no session and their identity
+// expires with the guest token.
 type AuthContext struct {
 	mu              sync.RWMutex
-	UserID          string
-	SessionID       string
+	UserID          string // registered user ID OR "guest:<uuid>" for guests
+	SessionID       string // empty for guests
 	TokenID         string
-	AccessExpiresAt time.Time
+	AccessExpiresAt time.Time // JWT expiry for registered users; guest token expiry for guests
+	IsGuest         bool
+	Nickname        string // guest display name (empty for registered users)
+	RoomID          string // guests are bound to one room
 }
 
 func (a *AuthContext) Snapshot() (userID, sessionID, tokenID string, accessExpiresAt time.Time) {
@@ -127,8 +139,20 @@ func (a *AuthContext) UpdateFrom(next *AuthContext) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// Registered users can only re-auth as themselves; guests cannot re-auth
+	// (they just reconnect if needed).
+	if next.IsGuest || a.IsGuest {
+		return
+	}
 	a.TokenID = next.TokenID
 	a.AccessExpiresAt = next.AccessExpiresAt
+}
+
+// GuestSnapshot returns the guest-specific fields (only meaningful when IsGuest).
+func (a *AuthContext) GuestSnapshot() (guestID, nickname, roomID string, expiresAt time.Time) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.UserID, a.Nickname, a.RoomID, a.AccessExpiresAt
 }
 
 // Client represents a connected WebSocket player connection.
@@ -144,7 +168,7 @@ type Client struct {
 	RoomID    string
 	Conn      *websocket.Conn
 	Send      chan []byte
-	Done      chan struct{}
+	Done      chan struct{} // closed when the client should be considered disconnected; signals broadcast loops to drop it.
 }
 
 // RoomEvent is delivered to an active room's single goroutine inbox.

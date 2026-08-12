@@ -1,26 +1,34 @@
 package middlewares
 
 import (
-	"log/slog"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"drawo/pkg/logger"
+	appErrors "drawo/pkg/errors"
 )
 
-// Recovery recovers from panics in HTTP handlers and returns a 500 response.
+// Recovery recovers from panics in HTTP handlers, logs them in a simple
+// plain-text format to stderr (standard library log.Printf), and returns a
+// generic 500 response to the client.
 //
-// Gin has a built-in recovery middleware, but this one also logs the panic with
-// the request ID so panics can be traced back to a specific request.
+// We intentionally use the standard logger here rather than a structured
+// logger, per project convention for unexpected bugs: internal errors should
+// produce a straightforward timestamped line in the terminal that is easy to
+// grep and read during local development.
 func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
-			if err := recover(); err != nil {
-				logger.WithContext(c.Request.Context()).Error(
-					"panic recovered in http handler",
-					slog.Any("error", err),
-					slog.String("path", c.Request.URL.Path),
+			if rec := recover(); rec != nil {
+				requestID, _ := c.Get(appErrors.RequestIDKey)
+				log.Printf(
+					"[PANIC RECOVERED] method=%s path=%s request_id=%v client_ip=%s panic=%v",
+					c.Request.Method,
+					c.Request.URL.Path,
+					requestID,
+					c.ClientIP(),
+					rec,
 				)
 
 				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

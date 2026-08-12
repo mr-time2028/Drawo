@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { App } from './App';
 import './i18n';
 import './styles/global.css';
+import './styles/dashboard.css';
 
 // React starts here. The HTML file only has <div id="root" />.
 ReactDOM.createRoot(document.getElementById('root')!).render(

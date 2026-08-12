@@ -8,19 +8,21 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
 	"drawo/config"
+	"drawo/internal/core/domain"
 	"drawo/internal/core/ports/repositories"
 	"drawo/pkg/errors"
 )
 
 const (
-	authDeadline              = 5 * time.Second
-	joinDeadline              = 10 * time.Second
+	authDeadline              = 15 * time.Second
+	joinDeadline              = 20 * time.Second
 	sessionCheckPeriod        = 30 * time.Second
 	clientSendBuffer          = 256
 	maxMessagesPerSecond      = 40
@@ -33,18 +35,36 @@ var (
 	reauthWarningBefore = 2 * time.Minute
 )
 
+// RoomLookup is the narrow subset of services.RoomService the realtime
+// handler needs (to avoid an import cycle: services → realtime is already
+// true for hub coordination, so we depend on an interface here).
+type RoomLookup interface {
+	ValidateGuestToken(ctx context.Context, token string) (*domain.GuestAuth, error)
+}
+
+// UserLookup is the narrow repository slice the realtime handler needs to
+// resolve a username from a user ID at WebSocket auth time. Accepting an
+// interface here avoids coupling the handler to the full UserRepository.
+type UserLookup interface {
+	GetByID(ctx context.Context, id string) (*domain.User, error)
+}
+
 type Handler struct {
 	cfg           config.Config
 	hub           *Hub
 	authenticator *Authenticator
+	rooms         RoomLookup
+	users         UserLookup
 	upgrader      websocket.Upgrader
 }
 
-func NewHandler(cfg config.Config, hub *Hub, sessions repositories.SessionRepository) *Handler {
+func NewHandler(cfg config.Config, hub *Hub, sessions repositories.SessionRepository, rooms RoomLookup, users UserLookup) *Handler {
 	h := &Handler{
 		cfg:           cfg,
 		hub:           hub,
 		authenticator: NewAuthenticator(cfg, sessions),
+		rooms:         rooms,
+		users:         users,
 	}
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -62,8 +82,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	conn.SetReadLimit(maxMessageSize)
 
-	authCtx, err := h.readAuth(r.Context(), conn)
+	authCtx, isGuest, err := h.readAuth(r.Context(), conn)
 	if err != nil {
+		// writePump has not started yet — write the error/close frame
+		// directly on the hijacked conn and return.
 		writeCloseError(conn, errors.WSErrAuthFailed, err.Error(), websocket.ClosePolicyViolation)
 		return
 	}
@@ -73,50 +95,156 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		SessionID: sessionID,
+		RoomID:    authCtx.RoomID, // pre-binding for guests; hub.JoinRoom will overwrite/confirm.
+		Username:  authCtx.Nickname, // for guests this is already set; registered users get their name from hub.
 		Conn:      conn,
 		Send:      make(chan []byte, clientSendBuffer),
 		Done:      make(chan struct{}),
 	}
 
-	if !h.enqueue(client, EventAuthOK, AuthOKPayload{UserID: userID, SessionID: sessionID, ExpiresAt: accessExpiresAt.Unix()}) {
-		writeCloseError(conn, errors.WSErrSendFailed, "client send queue unavailable", websocket.CloseInternalServerErr)
-		return
+	// Start the write pump BEFORE enqueuing auth_ok or reading `join`.
+	// Otherwise a well-behaved client that waits for auth_ok before sending
+	// join will deadlock with us (server waits for join, client waits for
+	// auth_ok) and surface as "read tcp ... i/o timeout" on the client.
+	writeCtx, writeCancel := context.WithCancel(r.Context())
+	doneWriting := make(chan struct{})
+	go func() {
+		h.writePump(writeCtx, client, authCtx)
+		close(doneWriting)
+	}()
+
+	// shutdownWritePump is the ONE way to tear the writer goroutine down
+	// once it is running. It closes client.Send (via closeClientSend which
+	// is idempotent and recover()-safe) so writePump drains any queued
+	// messages — including an EventError we just enqueued — then sends a
+	// proper WebSocket close frame and exits. We do NOT cancel writeCtx
+	// here because that races with draining: Go's select would pick
+	// <-ctx.Done() over <-client.Send and drop the error on the floor,
+	// which is why clients previously saw "close 1006 (abnormal closure)"
+	// instead of the EventError text frame.
+	var shutdownOnce sync.Once
+	shutdownWritePump := func() {
+		shutdownOnce.Do(func() {
+			closeClientSend(client)
+		})
+	}
+
+	// If we return before handing the client to readPump (i.e. during
+	// handshake), signal writePump to drain+close and wait for it to
+	// finish. After socketReady=true, readPump owns the lifecycle and
+	// will shut writePump down via hub.LeaveRoom → closeClientSend.
+	socketReady := false
+	defer func() {
+		if !socketReady {
+			shutdownWritePump()
+			<-doneWriting
+			// writePump has exited — safe to cancel now (also unblocks any
+			// ticker-blocked selects if they somehow didn't notice Send
+			// close, though writePump is already done at this point).
+			writeCancel()
+		}
+	}()
+
+	// Enqueue auth_ok through the already-running writePump. Any failure
+	// to enqueue goes through enqueueError as well (best-effort) before
+	// shutdownWritePump closes everything.
+	if isGuest {
+		if !h.enqueue(client, EventAuthOK, AuthOKPayload{UserID: userID, SessionID: "", ExpiresAt: accessExpiresAt.Unix()}) {
+			h.enqueueError(client, errors.WSErrSendFailed, "client send queue unavailable")
+			return
+		}
+	} else {
+		if !h.enqueue(client, EventAuthOK, AuthOKPayload{UserID: userID, SessionID: sessionID, ExpiresAt: accessExpiresAt.Unix()}) {
+			h.enqueueError(client, errors.WSErrSendFailed, "client send queue unavailable")
+			return
+		}
 	}
 
 	joinPayload, err := h.readJoin(conn)
 	if err != nil {
-		writeCloseError(conn, errors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
+		h.enqueueError(client, errors.WSErrJoinFailed, err.Error())
 		return
 	}
 	if _, err := h.hub.JoinByRequest(r.Context(), joinPayload, client); err != nil {
-		writeCloseError(conn, errors.WSErrJoinFailed, err.Error(), websocket.ClosePolicyViolation)
+		h.enqueueError(client, errors.WSErrJoinFailed, err.Error())
+		// If JoinByRequest failed AFTER partially registering the client in
+		// a room, make sure the room cleans it up. Calling LeaveRoom when
+		// the client was never registered is a safe no-op.
+		if client.RoomID != "" {
+			h.hub.LeaveRoom(client.RoomID, client)
+		}
 		return
 	}
 
-	go h.writePump(r.Context(), client, authCtx)
+	// Handshake complete — readPump takes over. When readPump returns
+	// (disconnect/leave/error) its defer calls hub.LeaveRoom which calls
+	// closeClientSend(client), closing client.Send so writePump drains
+	// any final messages, sends a Close frame, and exits. We MUST wait
+	// for writePump to exit on its own via Send-close before cancelling
+	// writeCtx, otherwise writeCancel races the drain just like in the
+	// handshake error paths above.
+	socketReady = true
 	h.readPump(r.Context(), client, authCtx)
+	// readPump's LeaveRoom already closed client.Send — writePump is now
+	// draining and will exit shortly. Wait for it, then cancel for good
+	// measure (the request context is about to die too).
+	<-doneWriting
+	writeCancel()
 }
 
-// readAuth requires the first frame to be an auth envelope. This avoids putting
-// access tokens in query strings, where reverse proxies and logs commonly leak
-// them. Browser clients can send this frame immediately after WebSocket open.
-func (h *Handler) readAuth(ctx context.Context, conn *websocket.Conn) (*AuthContext, error) {
+// readAuth requires the first frame to be an auth envelope. It accepts either
+// a registered-user access_token OR a short-lived guest_token (issued by
+// POST /rooms/by-code/:code/join). Returns the built AuthContext plus a bool
+// reporting whether this is a guest.
+func (h *Handler) readAuth(ctx context.Context, conn *websocket.Conn) (*AuthContext, bool, error) {
 	_ = conn.SetReadDeadline(time.Now().Add(authDeadline))
 	env, err := readEnvelope(conn)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if env.Type != EventAuth {
-		return nil, fmt.Errorf("first websocket message must be auth")
+		return nil, false, fmt.Errorf("first websocket message must be auth")
 	}
 	var payload AuthPayload
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
-		return nil, fmt.Errorf("invalid auth payload")
+		return nil, false, fmt.Errorf("invalid auth payload")
 	}
-	if strings.TrimSpace(payload.AccessToken) == "" {
-		return nil, fmt.Errorf("access token is required")
+	if strings.TrimSpace(payload.AccessToken) != "" {
+		ac, err := h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)
+		if err != nil {
+			return nil, false, err
+		}
+		// Best-effort username resolution for the player list. If the lookup
+		// fails (DB blip, deleted account mid-connection) we still let the
+		// socket through — the client will see the userID until a game_state
+		// arrives with a populated Players list (which also looks up names).
+		if h.users != nil && ac.Nickname == "" {
+			if u, err := h.users.GetByID(ctx, ac.UserID); err == nil && u != nil {
+				ac.Nickname = u.Username
+			}
+		}
+		return ac, false, nil
 	}
-	return h.authenticator.AuthenticateAccessToken(ctx, payload.AccessToken)
+	if strings.TrimSpace(payload.GuestToken) != "" {
+		if h.rooms == nil {
+			return nil, false, fmt.Errorf("guest auth not available")
+		}
+		g, err := h.rooms.ValidateGuestToken(ctx, payload.GuestToken)
+		if err != nil {
+			return nil, false, err
+		}
+		if g == nil {
+			return nil, false, fmt.Errorf("invalid guest token")
+		}
+		return &AuthContext{
+			UserID:          g.GuestID,
+			AccessExpiresAt: g.ExpiresAt,
+			IsGuest:         true,
+			Nickname:        g.Nickname,
+			RoomID:          g.RoomID,
+		}, true, nil
+	}
+	return nil, false, fmt.Errorf("access_token or guest_token is required")
 }
 
 func (h *Handler) readJoin(conn *websocket.Conn) (JoinPayload, error) {
@@ -193,12 +321,24 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 			return
 		}
 
-		if !h.authenticator.SessionActive(ctx, authCtx) {
+		if !authCtx.IsGuest && !h.authenticator.SessionActive(ctx, authCtx) {
 			h.enqueueError(client, errors.WSErrSessionRevoked, "session no longer active")
+			return
+		}
+		if authCtx.IsGuest && !authCtx.AccessValid(now) {
+			h.enqueueError(client, errors.WSErrAuthExpired, "guest session expired")
 			return
 		}
 
 		if env.Type == EventAuth {
+			if authCtx.IsGuest {
+				h.enqueueError(client, errors.WSErrAuthFailed, "guests cannot re-authenticate")
+				badMessages++
+				if badMessages >= maxConsecutiveBadMessages {
+					return
+				}
+				continue
+			}
 			if !authCtx.AccessValid(now) {
 				h.enqueueError(client, errors.WSErrAuthExpired, "websocket access token expired; reconnect with a fresh access token")
 				return
@@ -286,13 +426,35 @@ func (h *Handler) writePump(ctx context.Context, client *Client, authCtx *AuthCo
 	lastAuthRequired := time.Time{}
 
 	for {
+		// Check for shutdown (client.Done closed) non-blocking so that
+		// once signalled we stop servicing pings/auth-ticks and drain
+		// everything pending on client.Send before closing the socket.
+		// Without this, a ready ping or auth-ticker case could be chosen
+		// over a queued EventError message and the client would see a
+		// 1006 abnormal closure instead of the error frame.
+		select {
+		case <-client.Done:
+			h.writePumpDrainAndClose(client)
+			return
+		default:
+		}
+
 		select {
 		case <-ctx.Done():
+			return
+		case <-client.Done:
+			h.writePumpDrainAndClose(client)
 			return
 		case message, ok := <-client.Send:
 			_ = client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				_ = client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				// Send closed without going through Done — still shut
+				// down cleanly with a proper close frame.
+				_ = client.Conn.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+					time.Now().Add(writeWait),
+				)
 				return
 			}
 			if err := client.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
@@ -311,11 +473,50 @@ func (h *Handler) writePump(ctx context.Context, client *Client, authCtx *AuthCo
 	}
 }
 
+// writePumpDrainAndClose flushes every pending message on client.Send and
+// then sends a normal WebSocket close frame. It is invoked when client.Done
+// is closed — i.e. after closeClientSend(client) has been called. Because
+// closeClientSend closes Send immediately after closing Done, we will see
+// ok=false on the next Receive after the buffer empties.
+func (h *Handler) writePumpDrainAndClose(client *Client) {
+	for {
+		select {
+		case message, ok := <-client.Send:
+			_ = client.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				_ = client.Conn.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+					time.Now().Add(writeWait),
+				)
+				return
+			}
+			_ = client.Conn.WriteMessage(websocket.TextMessage, message)
+		default:
+			// No message ready right now — Send is unbuffered-empty
+			// but not yet closed (shouldn't normally happen since
+			// closeClientSend closes Send right after Done, but guard
+			// against a spin loop just in case).
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
 // writePumpAuthCheck runs inside writePump so auth/session monitoring does not
 // require a third goroutine per socket. This keeps the efficient per-socket model:
 // one readPump goroutine and one writePump goroutine.
 func (h *Handler) writePumpAuthCheck(ctx context.Context, client *Client, authCtx *AuthContext, lastAuthRequired *time.Time) bool {
 	now := time.Now()
+	if authCtx.IsGuest {
+		if !authCtx.AccessValid(now) {
+			_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: errors.WSErrAuthExpired.String(), Message: "guest session expired"})
+			if client.RoomID != "" {
+				h.hub.LeaveRoom(client.RoomID, client)
+			}
+			return false
+		}
+		return true
+	}
 	if !h.authenticator.SessionActive(ctx, authCtx) {
 		_ = h.writeEnvelopeNow(client, EventError, ErrorPayload{Code: errors.WSErrSessionRevoked.String(), Message: "session no longer active"})
 		if client.RoomID != "" {

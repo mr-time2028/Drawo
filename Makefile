@@ -3,7 +3,7 @@
 # Use this from the repository root as a convenience wrapper. There is no root
 # docker-compose.yml and no root .env. Backend and frontend are separate projects.
 
-.PHONY: backend-up backend-down backend-logs backend-dev-up backend-dev-down backend-dev-logs backend-download backend-tidy backend-migrate backend-serve frontend-up frontend-down frontend-logs frontend-install frontend-dev backend-test frontend-test frontend-test-coverage test
+.PHONY: backend-up backend-down backend-logs backend-dev-up backend-dev-down backend-dev-logs backend-download backend-tidy backend-migrate backend-serve backend-coverage frontend-up frontend-down frontend-logs frontend-install frontend-serve backend-test frontend-test frontend-test-coverage test
 
 backend-up:
 	cd backend && docker compose up -d --build
@@ -57,11 +57,14 @@ frontend-logs:
 frontend-install: frontend-env
 	cd frontend/app && npm install
 
-frontend-dev: frontend-env
+frontend-serve: frontend-env
 	cd frontend/app && npm run dev
 
 backend-test:
 	cd backend/app && go test ./...
+
+backend-coverage:
+	cd backend/app && go test -cover ./...
 
 frontend-test:
 	cd frontend/app && npm test

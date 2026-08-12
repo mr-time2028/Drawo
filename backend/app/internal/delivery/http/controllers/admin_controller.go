@@ -55,8 +55,7 @@ func (ctrl *AdminController) UploadSong(c *gin.Context) {
 	// 4. Call service to store in MinIO and DB
 	song, err := ctrl.adminSvc.UploadSong(c.Request.Context(), req.Title, req.Type, src, file.Size)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -72,8 +71,7 @@ func (ctrl *AdminController) ListSongs(c *gin.Context) {
 
 	songs, err := ctrl.adminSvc.ListSongs(c.Request.Context(), songType)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -95,8 +93,7 @@ func (ctrl *AdminController) ToggleSong(c *gin.Context) {
 	}
 
 	if err := ctrl.adminSvc.ToggleSong(c.Request.Context(), id, req.Active); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -107,8 +104,7 @@ func (ctrl *AdminController) ToggleSong(c *gin.Context) {
 func (ctrl *AdminController) DeleteSong(c *gin.Context) {
 	id := c.Param("id")
 	if err := ctrl.adminSvc.DeleteSong(c.Request.Context(), id); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "song deleted successfully"})
@@ -124,8 +120,7 @@ func (ctrl *AdminController) SearchUsers(c *gin.Context) {
 
 	results, err := ctrl.adminSvc.SearchUsers(c.Request.Context(), query)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -136,8 +131,7 @@ func (ctrl *AdminController) SearchUsers(c *gin.Context) {
 func (ctrl *AdminController) BanUser(c *gin.Context) {
 	id := c.Param("id")
 	if err := ctrl.adminSvc.BanUser(c.Request.Context(), id); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "user banned and logged out"})
@@ -147,8 +141,7 @@ func (ctrl *AdminController) BanUser(c *gin.Context) {
 func (ctrl *AdminController) UnbanUser(c *gin.Context) {
 	id := c.Param("id")
 	if err := ctrl.adminSvc.UnbanUser(c.Request.Context(), id); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "user unbanned successfully"})
@@ -169,8 +162,7 @@ func (ctrl *AdminController) UpdateSetting(c *gin.Context) {
 	}
 
 	if err := ctrl.adminSvc.UpdateGlobalSetting(c.Request.Context(), key, req.Value); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 
@@ -192,8 +184,7 @@ func (ctrl *AdminController) CreateBadWord(c *gin.Context) {
 	}
 	badWord, err := ctrl.adminSvc.CreateBadWord(c.Request.Context(), req.Text, req.Language)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, badWord)
@@ -203,8 +194,7 @@ func (ctrl *AdminController) CreateBadWord(c *gin.Context) {
 func (ctrl *AdminController) ListBadWords(c *gin.Context) {
 	badWords, err := ctrl.adminSvc.ListBadWords(c.Request.Context(), c.Query("language"))
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, badWords)
@@ -213,8 +203,7 @@ func (ctrl *AdminController) ListBadWords(c *gin.Context) {
 // DeleteBadWord removes a prohibited word from the moderation dictionary.
 func (ctrl *AdminController) DeleteBadWord(c *gin.Context) {
 	if err := ctrl.adminSvc.DeleteBadWord(c.Request.Context(), c.Param("id")); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "bad word deleted"})
@@ -230,8 +219,7 @@ func (ctrl *AdminController) ListReports(c *gin.Context) {
 	paging := domain.Paging{Limit: 50, Offset: 0}
 	reports, err := ctrl.adminSvc.ListReports(c.Request.Context(), domain.ReportStatus(c.Query("status")), paging)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, reports)
@@ -241,8 +229,7 @@ func (ctrl *AdminController) ListReports(c *gin.Context) {
 func (ctrl *AdminController) GetReport(c *gin.Context) {
 	report, err := ctrl.adminSvc.GetReport(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, report)
@@ -254,8 +241,7 @@ func (ctrl *AdminController) ConfirmReport(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	adminID := c.GetString("userID")
 	if err := ctrl.adminSvc.ConfirmReport(c.Request.Context(), c.Param("id"), adminID, req.Note); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "report confirmed"})
@@ -267,8 +253,7 @@ func (ctrl *AdminController) RejectReport(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	adminID := c.GetString("userID")
 	if err := ctrl.adminSvc.RejectReport(c.Request.Context(), c.Param("id"), adminID, req.Note); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "report rejected"})
@@ -290,8 +275,7 @@ func (ctrl *AdminController) CreateCategory(c *gin.Context) {
 	}
 	cat, err := ctrl.adminSvc.CreateCategory(c.Request.Context(), req.Name, req.Language, req.GroupID)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, cat)
@@ -300,8 +284,7 @@ func (ctrl *AdminController) CreateCategory(c *gin.Context) {
 func (ctrl *AdminController) ListCategories(c *gin.Context) {
 	cats, err := ctrl.adminSvc.ListCategories(c.Request.Context(), c.Query("language"))
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, cats)
@@ -309,8 +292,7 @@ func (ctrl *AdminController) ListCategories(c *gin.Context) {
 
 func (ctrl *AdminController) DeleteCategory(c *gin.Context) {
 	if err := ctrl.adminSvc.DeleteCategory(c.Request.Context(), c.Param("id")); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "category deleted"})
@@ -334,8 +316,7 @@ func (ctrl *AdminController) CreateWord(c *gin.Context) {
 	}
 	word, err := ctrl.adminSvc.CreateWord(c.Request.Context(), req.CategoryID, req.GroupID, req.Text, req.Language, req.Points)
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, word)
@@ -344,8 +325,7 @@ func (ctrl *AdminController) CreateWord(c *gin.Context) {
 func (ctrl *AdminController) ListWords(c *gin.Context) {
 	words, err := ctrl.adminSvc.ListWords(c.Request.Context(), c.Query("category_id"), c.Query("language"))
 	if err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, words)
@@ -353,8 +333,7 @@ func (ctrl *AdminController) ListWords(c *gin.Context) {
 
 func (ctrl *AdminController) DeleteWord(c *gin.Context) {
 	if err := ctrl.adminSvc.DeleteWord(c.Request.Context(), c.Param("id")); err != nil {
-		appErr, _ := err.(*errors.AppError)
-		c.JSON(appErr.Response())
+		errors.RespondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "word deleted"})

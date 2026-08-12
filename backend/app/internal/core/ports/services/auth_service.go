@@ -96,11 +96,11 @@ func (s *authService) Register(ctx context.Context, username, password string) (
 		UpdatedAt:    time.Now(),
 	}
 
-	// 4. Create the initial profile for the user.
+	// 4. Create the initial profile for the user. Theme is handled entirely
+	// on the frontend via localStorage and is NOT stored on the profile.
 	profile := &domain.Profile{
 		UserID:          user.ID,
 		Locale:          "fa", // Persian is the default language for Drawo.
-		Theme:           "light",
 		BackgroundSound: true,
 		ToolSound:       true,
 		ReputationScore: 10000, // Default production starting reputation

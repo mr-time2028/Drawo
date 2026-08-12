@@ -9,11 +9,10 @@ export type TokenPair = {
 /**
  * Normalize the login/refresh response from the backend.
  *
- * The Go domain.TokenPair struct currently lacks `json:"..."` tags, so it
- * serializes with PascalCase field names (AccessToken/RefreshToken/ExpiresIn).
- * We also accept the documented snake_case names for when the backend gets
- * the tags added. This defensive normalization keeps frontend code working
- * through either shape.
+ * The Go domain.TokenPair struct now has `json:"..."` tags that serialize
+ * fields as snake_case (access_token/refresh_token/expires_in). For backward
+ * compatibility with previous builds and any local backend that hasn't been
+ * restarted with the updated struct, we also accept PascalCase.
  */
 function normalizeTokens(raw: unknown): TokenPair {
   const r = raw as Record<string, unknown>;
@@ -29,31 +28,41 @@ function normalizeTokens(raw: unknown): TokenPair {
 }
 
 export async function login(username: string, password: string): Promise<TokenPair> {
+  // Public endpoint — skip Authorization header.
   const raw = await apiRequest<Record<string, unknown>>('/api/v1/auth/login', {
     method: 'POST',
     data: { username, password },
+    accessToken: null,
   });
   return normalizeTokens(raw);
 }
 
 export async function register(username: string, password: string, confirmPassword: string) {
+  // Public endpoint — skip Authorization header.
   return apiRequest('/api/v1/auth/register', {
     method: 'POST',
     data: { username, password, confirm_password: confirmPassword },
+    accessToken: null,
   });
 }
 
 export async function refresh(refreshToken: string): Promise<TokenPair> {
+  // The refresh endpoint takes the refresh token in the JSON body and does
+  // NOT read an Authorization header — if we let the interceptor attach our
+  // now-expired access token, the backend's middleware chain could reject
+  // the request before it reaches the refresh controller. Opt out.
   const raw = await apiRequest<Record<string, unknown>>('/api/v1/auth/refresh', {
     method: 'POST',
     data: { refresh_token: refreshToken },
+    accessToken: null,
   });
   return normalizeTokens(raw);
 }
 
-export async function logout(accessToken: string) {
+export async function logout() {
+  // The Authorization header is attached automatically by the interceptor.
+  // We DO NOT pass accessToken manually anymore.
   return apiRequest('/api/v1/auth/logout', {
     method: 'POST',
-    accessToken,
   });
 }

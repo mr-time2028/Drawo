@@ -50,4 +50,7 @@ i18n.on('languageChanged', (language) => {
   }
 });
 
+// Re-export language helpers so callers can import from '@/i18n'.
 export { i18n };
+export { isSupportedLanguage, defaultLanguage, getLanguageDirection } from './languages';
+export type { SupportedLanguage } from './languages';

@@ -106,12 +106,22 @@ func (h *Hub) startRoom(ctx context.Context, state *domain.Room) *Room {
 	if existing, ok := h.rooms[state.ID]; ok {
 		return existing
 	}
-	room := NewRoom(state, h.onRoomClosed, h.contentRepo, h.profileRepo, h.reputationRepo, h.reportRepo, h.userRepo, h.sessionRepo)
+	room := NewRoom(state, h.onRoomClosed, h.roomRepo, h.contentRepo, h.profileRepo, h.reputationRepo, h.reportRepo, h.userRepo, h.sessionRepo)
 	h.rooms[state.ID] = room
 	if _, ok := h.loads[state.ID]; !ok {
 		h.loads[state.ID] = 0
 	}
-	go room.Run(ctx)
+	// Run the room goroutine under a long-lived background context rather
+	// than the caller's request ctx. Previously we passed `ctx` from the
+	// WebSocket handshake, so when the first HTTP/WS request returned the
+	// room Run goroutine was cancelled, the defer fired onRoomClosed, and
+	// the room was deleted from cache — which meant refreshing the page
+	// or inviting a friend returned "room not found". The room's own
+	// lifecycle (handleReconnectTimer / handleEvent returning false) is
+	// responsible for shutting itself down when it's truly empty and
+	// finished; we use context.Background here so request cancellation
+	// never kills an active room.
+	go room.Run(context.Background())
 	return room
 }
 
@@ -139,12 +149,18 @@ func (h *Hub) GetRoomByInviteCode(ctx context.Context, inviteCode string) (*doma
 // matchmaking. The backend then finds a non-full public room or creates a new
 // one. Private rooms use invite_code. room_id remains supported for reconnects,
 // tests, and admin/debug flows, but normal public clients do not need to know it.
+//
+// Guests (client.Username set via guest token) are room-bound: they MUST provide
+// either a matching invite_code or room_id that matches the room on their token.
+// They cannot use public matchmaking.
 func (h *Hub) JoinByRequest(ctx context.Context, payload JoinPayload, client *Client) (string, error) {
 	payload.Mode = strings.ToLower(strings.TrimSpace(payload.Mode))
 	payload.RoomID = strings.TrimSpace(payload.RoomID)
 	payload.InviteCode = strings.TrimSpace(payload.InviteCode)
 	payload.Language = strings.ToLower(strings.TrimSpace(payload.Language))
 	payload.CategoryID = strings.TrimSpace(payload.CategoryID)
+
+	isGuest := domain.IsGuestID(client.UserID)
 
 	if payload.Mode == "reconnect" {
 		h.mu.RLock()
@@ -154,6 +170,31 @@ func (h *Hub) JoinByRequest(ctx context.Context, payload JoinPayload, client *Cl
 			return "", errors.New("no active room to reconnect")
 		}
 		return roomID, h.JoinRoom(ctx, roomID, client)
+	}
+
+	if isGuest {
+		// Guests can only join the one room their token was issued for. The
+		// auth handler already stored the bound RoomID on client via RoomID
+		// field in the future; for now we require invite_code to resolve to
+		// that same room.
+		if client.RoomID == "" {
+			return "", errors.New("guest token is not bound to a room")
+		}
+		// If they sent a RoomID it must match.
+		if payload.RoomID != "" && payload.RoomID != client.RoomID {
+			return "", errors.New("guest token does not match this room")
+		}
+		// If they sent an invite_code it must resolve to the same room.
+		if payload.InviteCode != "" {
+			room, err := h.roomRepo.GetByInviteCode(ctx, payload.InviteCode)
+			if err != nil || room == nil {
+				return "", errors.New("private room not found")
+			}
+			if room.ID != client.RoomID {
+				return "", errors.New("guest token does not match this invite")
+			}
+		}
+		return client.RoomID, h.JoinRoom(ctx, client.RoomID, client)
 	}
 
 	if payload.RoomID != "" {
@@ -204,6 +245,7 @@ func (h *Hub) matchPublicRoom(ctx context.Context, payload JoinPayload) (string,
 		Type:       domain.RoomTypePublic,
 		Language:   language,
 		CategoryID: payload.CategoryID,
+		WordSource: domain.WordSourceDefault,
 		State:      domain.RoomStateLobby,
 		MinPlayers: defaultMinPlayers,
 		MaxPlayers: defaultMaxPlayers,

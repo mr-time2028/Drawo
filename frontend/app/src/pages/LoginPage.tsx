@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -6,10 +6,15 @@ import { login, register } from '../api/auth';
 import { ApiError } from '../api/http';
 import { useAuthStore } from '../stores/authStore';
 import { getDisplayError } from '../utils/errorMessages';
+import { safeNextPath } from '../utils/redirect';
 
 type AuthMode = 'login' | 'register';
 type AuthField = 'username' | 'password' | 'confirm_password';
 type AuthErrorState = { kind: 'api'; error: unknown } | { kind: 'translation'; key: string };
+
+type LoginSearch = {
+  next?: string;
+};
 
 const MIN_USERNAME_LENGTH = 3;
 const MAX_USERNAME_LENGTH = 20;
@@ -29,7 +34,10 @@ type LoginPageProps = {
 export function LoginPage({ initialMode = 'login' }: LoginPageProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as LoginSearch;
   const setTokens = useAuthStore((state) => state.setTokens);
+
+  const nextPath = safeNextPath(search.next);
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [username, setUsername] = useState('');
@@ -149,16 +157,22 @@ export function LoginPage({ initialMode = 'login' }: LoginPageProps) {
 
         await register(username.trim(), password, confirmPassword);
         sessionStorage.setItem('drawo.auth_success', 'auth.registerSuccess');
-        await navigate({ to: '/login', replace: true });
+        await navigate({ to: '/login', search: nextPath ? { next: nextPath } : undefined, replace: true });
         return;
       }
 
       const tokens = await login(username.trim(), password);
-      // Store tokens. The router's beforeLoad runs on the next navigation and
-      // will see the token; we then navigate to /app imperatively. Since
-      // beforeLoad is a synchronous check that reads both zustand state and
+      // Store the full token pair (access + refresh + expires_in). The
+      // router's beforeLoad runs on the next navigation and will see the
+      // fresh token; we then navigate to /app imperatively. Since beforeLoad
+      // is a synchronous check that reads both zustand state and
       // localStorage, it cannot race with React render.
-      setTokens(tokens.access_token, tokens.refresh_token);
+      setTokens(tokens);
+      // If the user hit /login via an invite link, return them there.
+      if (nextPath) {
+        await navigate({ to: nextPath, replace: true });
+        return;
+      }
       await navigate({ to: '/app', replace: true });
     } catch (err) {
       markBackendErrorFields(err);

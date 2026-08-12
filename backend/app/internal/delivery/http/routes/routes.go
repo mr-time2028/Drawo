@@ -60,6 +60,28 @@ func Register(router *gin.Engine, container *di.Container) {
 			user.POST("/profile/verify/confirm", userCtrl.ConfirmVerification)
 		}
 
+		// Rooms: ephemeral public/private matches. Get-by-code is public (so
+		// invite links work without login). Join-by-code accepts both
+		// registered users (Bearer) and anonymous guests (no auth + nickname),
+		// so we protect it with OptionalAuth instead of RequireAuth.
+		roomCtrl := controllers.NewRoomController(container.Services.Room, container.Services.Admin)
+		api.GET("/rooms/by-code/:code", roomCtrl.GetByCode)
+		api.POST("/rooms/by-code/:code/join", middlewares.OptionalAuth(container), roomCtrl.Join)
+		api.GET("/categories", roomCtrl.ListCategories)
+		// Room metadata lookup is also used by guests who have a valid
+		// guest_token for that room. Mutating endpoints still require auth.
+		api.GET("/rooms/:id", middlewares.OptionalAuth(container), roomCtrl.Get)
+
+		rooms := api.Group("/rooms")
+		rooms.Use(middlewares.RequireAuth(container))
+		{
+			rooms.POST("", roomCtrl.Create)
+			rooms.PATCH("/:id", roomCtrl.Update)
+			rooms.POST("/:id/start", roomCtrl.Start)
+			rooms.POST("/:id/leave", roomCtrl.Leave)
+			rooms.POST("/:id/close", roomCtrl.Close)
+		}
+
 		// Admin routes
 		adminCtrl := controllers.NewAdminController(container.Services.Admin)
 		admin := api.Group("/admin")

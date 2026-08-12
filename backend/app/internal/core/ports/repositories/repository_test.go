@@ -65,7 +65,7 @@ func TestProfileRepository(t *testing.T) {
 	repo.Insert(p)
 	f, _ := repo.GetByUserID("u1")
 	assert.Equal(t, "a@a.com", f.Email)
-	p.Theme = "dark"
+	p.Locale = "en"
 	repo.Update(p)
 }
 

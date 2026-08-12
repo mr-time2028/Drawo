@@ -1,13 +1,18 @@
 package errors
 
 import (
-	"errors"
+	stderrors "errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+}
 
 func TestAppError(t *testing.T) {
 	err := New(ErrNotFound, "not found")
@@ -80,7 +85,7 @@ func TestAppErrorResponse(t *testing.T) {
 		},
 		{
 			name:       "unknown code returns internal",
-			appErr:     &AppError{Err: errors.New("unknown"), Message: "oops"},
+			appErr:     &AppError{Err: stderrors.New("unknown"), Message: "oops"},
 			wantStatus: http.StatusInternalServerError,
 			wantMsg:    "internal server error",
 		},
@@ -115,4 +120,47 @@ func TestValidationError(t *testing.T) {
 	status, body := ValidationError(fields)
 	assert.Equal(t, http.StatusUnprocessableEntity, status)
 	assert.Equal(t, fields, body["message"])
+}
+
+// TestRespondError_AppError verifies that RespondError returns the correct
+// status and body for expected (AppError) failures.
+func TestRespondError_AppError(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/v1/test", nil)
+
+	RespondError(c, New(ErrNotFound, "user not found"))
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "user not found")
+}
+
+// TestRespondError_RawError verifies that unexpected (non-AppError) errors
+// produce a 500 with a generic message (no leakage of internal details) AND
+// do not panic.
+func TestRespondError_RawError(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/v1/test", nil)
+
+	// Simulate an infrastructure failure that wasn't wrapped in AppError —
+	// e.g. a database driver error.
+	RespondError(c, stderrors.New("dial tcp 10.0.0.1:5432: connect: connection refused"))
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	// The body must NOT contain the real error text.
+	assert.NotContains(t, w.Body.String(), "connection refused")
+	assert.Contains(t, w.Body.String(), "internal server error")
+}
+
+// TestRespondError_Nil is a no-op safety check.
+func TestRespondError_Nil(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/v1/test", nil)
+
+	// Should not panic or write anything.
+	RespondError(c, nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 0, w.Body.Len())
 }
