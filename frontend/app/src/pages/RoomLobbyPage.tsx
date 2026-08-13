@@ -5,12 +5,12 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { buildInviteURL, closeRoom, getRoom, leaveRoom, type Room } from '@/api/room';
-import { readGuestSession, clearGuestSession, type GuestSession } from '@/api/guestTokenManager';
+import { readGuestSession, clearGuestSession } from '@/api/guestTokenManager';
 import { getProfile } from '@/api/user';
 import { useRoomSocket } from '@/api/useRoomSocket';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card, CardDescription, CardTitle } from '@/components/ui/Card';
 
 export function RoomLobbyPage() {
   const { t } = useTranslation();
@@ -112,6 +112,13 @@ export function RoomLobbyPage() {
   const gameState = socketLive ? socket.gameState : (restState === 'playing' ? 'countdown' : 'waiting_for_players');
   const isInLobby = gameState === 'waiting_for_players';
   const isPlaying = ['countdown', 'word_selection', 'drawing', 'round_end', 'leaderboard', 'drawer_disconnected'].includes(gameState);
+  // Guests cannot reconnect (a new invite join is a new identity). Hide any
+  // leftover offline guest row. Logged-in players stay visible as offline
+  // while we wait for them to come back.
+  const visiblePlayers = players.filter((p) => {
+    const guest = Boolean(p.is_guest || p.user_id.startsWith('guest:'));
+    return p.is_online || !guest;
+  });
 
   async function copyLink() {
     if (!inviteURL) return;
@@ -145,6 +152,8 @@ export function RoomLobbyPage() {
     if (!room) return;
     setLeaving(true);
     try {
+      // Tell the room to drop this seat immediately (not "offline / reconnect").
+      socket.send('leave');
       if (isGuest) {
         clearGuestSession();
         toast.success(t('rooms.left', 'You left the room.'));
@@ -200,19 +209,19 @@ export function RoomLobbyPage() {
   return (
     <div className="room-lobby-page">
       <div className="room-lobby-inner">
-        <Card padding="lg" className="room-lobby-card">
-          <CardHeader>
-            <div>
-              <CardTitle>{room.name}</CardTitle>
-              <CardDescription>
-                {room.type === 'private'
-                  ? t('rooms.privateRoom', 'Private room')
-                  : t('rooms.publicRoom', 'Public room')}
-                {' · '}
+        <Card padding="none" className="room-lobby-card">
+          <header className="room-lobby-header">
+            <div className="room-lobby-heading">
+              <CardTitle className="room-lobby-title">{room.name}</CardTitle>
+              <CardDescription className="room-lobby-meta">
+                <span className="room-lobby-kind">
+                  {room.type === 'private'
+                    ? t('rooms.privateRoom', 'Private room')
+                    : t('rooms.publicRoom', 'Public room')}
+                </span>
                 <span className={`room-state-badge state-${isInLobby ? 'lobby' : gameState}`}>
                   {isInLobby ? t('rooms.lobby', 'lobby') : gameState}
                 </span>
-                {' · '}
                 <span className="room-connection-status" data-status={socket.status}>
                   {socket.status === 'open' ? <Wifi size={12} aria-hidden /> : <WifiOff size={12} aria-hidden />}
                   {connectionStatusLabel}
@@ -227,10 +236,10 @@ export function RoomLobbyPage() {
                 disabled={closing}
                 aria-label={t('rooms.closeRoom', 'Close room')}
               >
-                <Trash2 size={16} />
+                <Trash2 size={15} />
               </button>
             )}
-          </CardHeader>
+          </header>
 
           <div className="room-invite-bar">
             <div className="room-invite-url" title={inviteURL}>
@@ -239,18 +248,19 @@ export function RoomLobbyPage() {
             <Button
               variant="secondary"
               size="sm"
-              leftIcon={<Copy size={15} />}
+              leftIcon={<Copy size={14} />}
               onClick={copyLink}
               type="button"
+              className={copied ? 'room-invite-copy is-copied' : 'room-invite-copy'}
             >
               {copied ? t('rooms.copied', 'Copied') : t('rooms.copyLink', 'Copy link')}
             </Button>
           </div>
 
           <div className="room-lobby-grid">
-            <section className="room-section">
+            <section className="room-section room-section-settings">
               <h3 className="room-section-title">
-                <Settings size={16} aria-hidden />
+                <Settings size={15} aria-hidden />
                 {t('rooms.settingsTitle', 'Game settings')}
               </h3>
               <dl className="room-meta-grid">
@@ -280,92 +290,108 @@ export function RoomLobbyPage() {
               </dl>
             </section>
 
-            <section className="room-section">
+            <section className="room-section room-section-players">
               <h3 className="room-section-title">
-                <Crown size={16} aria-hidden />
+                <Crown size={15} aria-hidden />
                 {t('rooms.players', 'Players')}
                 <span className="room-player-count">
                   {onlineCount}/{socket.maxPlayers || room.max_players}
                 </span>
               </h3>
-              <div className="room-players-list">
+              <ul className="room-players-list" tabIndex={players.length > 5 ? 0 : undefined}>
                 {players.map((p) => {
                   const isMe = p.user_id === currentUserID;
-                  const name = isMe ? displayName || p.username || t('rooms.you', 'You') : (p.username || p.user_id.slice(0, 8));
+                  const isGuestPlayer =
+                    p.is_guest || p.user_id.startsWith('guest:') || (isMe && isGuest);
+                  const name = isMe
+                    ? displayName || p.username || t('rooms.you', 'You')
+                    : p.username || p.user_id.slice(0, 8);
+                  const role = p.is_owner
+                    ? t('rooms.owner', 'Owner')
+                    : isGuestPlayer
+                      ? t('rooms.guest', 'Guest')
+                      : t('rooms.player', 'Player');
                   return (
-                    <div className="room-player" key={p.user_id}>
-                      <Avatar size="md" fallbackName={name} />
-                      <div>
+                    <li
+                      className={[
+                        'room-player',
+                        isMe ? 'is-you' : '',
+                        p.is_owner ? 'is-owner' : '',
+                        !p.is_online ? 'is-offline' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      key={p.user_id}
+                    >
+                      <Avatar size="sm" alt={name} className="room-player-avatar" />
+                      <div className="room-player-info">
                         <p className="room-player-name">
                           {name}
-                          {isMe ? <span className="room-player-you"> ({t('rooms.you', 'You')})</span> : null}
+                          {isMe ? <span className="room-player-you">{t('rooms.you', 'You')}</span> : null}
                         </p>
                         <p className="room-player-sub">
-                          {p.is_owner
-                            ? t('rooms.owner', 'Owner')
-                            : p.is_guest || p.user_id.startsWith('guest:') || (isMe && isGuest)
-                              ? t('rooms.guest', 'Guest')
-                              : t('rooms.player', 'Player')}
+                          {role}
                           {!p.is_online ? ` · ${t('rooms.offline', 'offline')}` : ''}
                         </p>
                       </div>
                       {p.is_owner && (
-                        <span className="room-owner-badge">
-                          <Crown size={14} />
+                        <span className="room-owner-badge" title={t('rooms.owner', 'Owner')}>
+                          <Crown size={12} />
                         </span>
                       )}
-                    </div>
+                    </li>
                   );
                 })}
-                {players.length < (socket.minPlayers || 2) && (
-                  <p className="room-empty-hint">
-                    {t(
-                      'rooms.waitingForPlayers',
-                      'Share the invite link to add more players.',
-                    )}
-                  </p>
-                )}
-              </div>
+              </ul>
+              {visiblePlayers.length < (socket.minPlayers || 2) && (
+                <p className="room-empty-hint">
+                  {t('rooms.waitingForPlayers', 'Share the invite link to add more players.')}
+                </p>
+              )}
             </section>
           </div>
 
-          <div className="room-lobby-actions">
+          <footer className="room-lobby-actions">
             <Button
               variant="ghost"
+              size="sm"
               onClick={handleLeave}
               leftIcon={<LogOut size={15} />}
               type="button"
               loading={leaving}
               disabled={leaving || closing || starting}
+              className="room-lobby-leave"
             >
               {t('rooms.leave', 'Leave room')}
             </Button>
             {isOwner ? (
               !isInLobby ? (
-                <Button disabled>
+                <Button disabled variant="ghost" size="sm" className="room-lobby-status">
                   {isPlaying
                     ? t('rooms.gameInProgressState', 'Game in progress')
                     : t('rooms.roomUnavailable', 'Room unavailable')}
                 </Button>
               ) : (
                 <Button
+                  size="sm"
                   onClick={handleStart}
                   loading={starting}
                   leftIcon={<Play size={15} />}
                   type="button"
                   disabled={leaving || closing || onlineCount < (socket.minPlayers || 2)}
+                  className="room-lobby-start"
                 >
                   {t('dashboard.startMatch', 'Start Match')}
                 </Button>
               )
             ) : (
-              <Button disabled>
+              <Button disabled variant="ghost" size="sm" className="room-lobby-status">
                 {isPlaying
                   ? t('rooms.gameInProgressState', 'Game in progress')
                   : t('rooms.waitingForOwner', 'Waiting for owner to start…')}
               </Button>
             )}
-          </div>
+          </footer>
         </Card>
       </div>
     </div>

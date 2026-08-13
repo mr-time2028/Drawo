@@ -371,6 +371,7 @@ func (h *Handler) readPump(ctx context.Context, client *Client, authCtx *AuthCon
 		badMessages = 0
 
 		if env.Type == EventLeave {
+			client.IntentionalLeave = true
 			return
 		}
 

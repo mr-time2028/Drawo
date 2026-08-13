@@ -23,7 +23,8 @@ type Room struct {
 	state   *domain.Room
 	clients map[string]*Client
 	inbox   chan *RoomEvent
-	onClose func(roomID, inviteCode string)
+	onClose         func(roomID, inviteCode string)
+	onPlayerRemoved func(userID string)
 
 	roomRepo     repositories.RoomRepository
 	contentRepo  repositories.ContentRepository
@@ -145,7 +146,7 @@ func (r *Room) handleEvent(e *RoomEvent) bool {
 	case EventJoin:
 		r.handleJoin(e.Client)
 	case EventLeave:
-		r.handleLeave(e.Client)
+		r.handleLeave(e)
 		if len(r.clients) == 0 && r.state.State == domain.RoomStateFinished {
 			return false
 		}
@@ -452,10 +453,15 @@ func (r *Room) handleJoin(client *Client) {
 	//       caused the room to be garbage-collected as "finished" shortly after.
 }
 
-func (r *Room) handleLeave(client *Client) {
+func (r *Room) handleLeave(e *RoomEvent) {
+	if e == nil || e.Client == nil {
+		return
+	}
+	client := e.Client
 	if existing, ok := r.clients[client.ID]; ok {
 		delete(r.clients, client.ID)
 		delete(r.drawLimits, client.ID)
+		delete(r.chatLimits, client.ID)
 		closeClientSend(existing)
 	} else {
 		// This client was already removed from r.clients — which happens when
@@ -477,6 +483,33 @@ func (r *Room) handleLeave(client *Client) {
 		}
 	}
 	player := r.players[client.UserID]
+	// Registered accounts can reconnect (same user_id). Guests cannot: a new
+	// invite-link join mints a new guest token/id, so holding an offline seat
+	// would just leave a ghost nickname. Explicit Leave always drops the seat.
+	isGuest := domain.IsGuestID(client.UserID)
+	permanent := e.Permanent || client.IntentionalLeave || isGuest
+	if permanent {
+		if player != nil && r.isActiveGameState() && !player.Abandoned {
+			delta := abandonRepPenalty
+			if player.IsDrawer {
+				delta = drawerAbandonPenalty
+			}
+			r.reputation.add(player.UserID, delta, "abandoned_active_game")
+			if player.IsDrawer && r.gameState == GameStateDrawing {
+				r.endRound()
+			}
+		}
+		r.removePlayer(client.UserID)
+		r.broadcastSystem(EventPlayerLeft, PlayerEventPayload{UserID: client.UserID, Username: displayName(player)})
+		r.broadcastGameState()
+		if len(r.clients) == 0 {
+			r.clearTimer()
+			if r.state.State != domain.RoomStateLobby {
+				r.scheduleReconnectCheck(reconnectGrace)
+			}
+		}
+		return
+	}
 	if player != nil {
 		player.IsOnline = false
 		player.ClientID = ""
@@ -494,6 +527,26 @@ func (r *Room) handleLeave(client *Client) {
 	if len(r.clients) == 0 {
 		r.clearTimer()
 		r.scheduleReconnectCheck(reconnectGrace)
+	}
+}
+
+func (r *Room) removePlayer(userID string) {
+	if userID == "" {
+		return
+	}
+	delete(r.players, userID)
+	kept := r.playerOrder[:0]
+	for _, id := range r.playerOrder {
+		if id != userID {
+			kept = append(kept, id)
+		}
+	}
+	r.playerOrder = kept
+	if r.state != nil && r.state.CurrentDrawerID == userID {
+		r.state.CurrentDrawerID = ""
+	}
+	if r.onPlayerRemoved != nil {
+		r.onPlayerRemoved(userID)
 	}
 }
 
@@ -1017,6 +1070,9 @@ func (r *Room) isActiveGameState() bool {
 
 func (r *Room) handleReconnectTimer(force bool) bool {
 	r.markExpiredDisconnects(force)
+	if r.gameState == GameStateWaitingForPlayers {
+		r.pruneExpiredLobbySeats()
+	}
 	if len(r.clients) == 0 {
 		// A room in the lobby (waiting for players, game never started)
 		// should NOT be garbage-collected just because the owner refreshed
@@ -1045,6 +1101,20 @@ func (r *Room) handleReconnectTimer(force bool) bool {
 		r.endRound()
 	}
 	return true
+}
+
+func (r *Room) pruneExpiredLobbySeats() {
+	removed := false
+	for userID, player := range r.players {
+		if player == nil || player.IsOnline || !player.Abandoned {
+			continue
+		}
+		r.removePlayer(userID)
+		removed = true
+	}
+	if removed {
+		r.broadcastGameState()
+	}
 }
 
 func (r *Room) markExpiredDisconnects(force bool) {

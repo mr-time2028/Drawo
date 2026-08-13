@@ -150,6 +150,58 @@ label {
   color: white;
 }
 
+.drawo-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.drawo-avatar-sm {
+  width: 36px;
+  height: 36px;
+}
+
+.drawo-avatar-md {
+  width: 44px;
+  height: 44px;
+}
+
+.drawo-avatar-lg {
+  width: 56px;
+  height: 56px;
+}
+
+.drawo-avatar-xl {
+  width: 80px;
+  height: 80px;
+}
+
+.drawo-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.drawo-avatar-unknown {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+}
+
+.drawo-avatar-icon {
+  width: 50%;
+  height: 50%;
+}
+
+.navbar-avatar-button .drawo-avatar-unknown {
+  border: 0;
+  background: transparent;
+}
+
 .navbar-avatar-button {
   display: inline-flex;
   align-items: center;
@@ -169,6 +221,11 @@ label {
 
 .navbar-avatar-button:hover {
   transform: translateY(-1px);
+  border-color: var(--border-strong);
+}
+
+.navbar-avatar-button:active {
+  transform: translateY(0);
 }
 
 .app-controls {

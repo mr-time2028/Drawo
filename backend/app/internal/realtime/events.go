@@ -169,6 +169,9 @@ type Client struct {
 	Conn      *websocket.Conn
 	Send      chan []byte
 	Done      chan struct{} // closed when the client should be considered disconnected; signals broadcast loops to drop it.
+	// IntentionalLeave is set when the client sent a leave frame so the room
+	// can distinguish "I quit" from a dropped socket that may reconnect.
+	IntentionalLeave bool
 }
 
 // RoomEvent is delivered to an active room's single goroutine inbox.
@@ -183,4 +186,8 @@ type RoomEvent struct {
 	Payload   json.RawMessage
 	Seq       int64
 	Timestamp time.Time
+	// Permanent is true when the player meant to leave (Leave button / leave
+	// frame). The room then drops them from the roster instead of holding an
+	// offline reconnect slot. Lobby disconnects are also treated as permanent.
+	Permanent bool
 }

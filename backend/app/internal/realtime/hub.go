@@ -107,6 +107,16 @@ func (h *Hub) startRoom(ctx context.Context, state *domain.Room) *Room {
 		return existing
 	}
 	room := NewRoom(state, h.onRoomClosed, h.roomRepo, h.contentRepo, h.profileRepo, h.reputationRepo, h.reportRepo, h.userRepo, h.sessionRepo)
+	room.onPlayerRemoved = func(userID string) {
+		if userID == "" {
+			return
+		}
+		h.mu.Lock()
+		if h.activeRooms[userID] == state.ID {
+			delete(h.activeRooms, userID)
+		}
+		h.mu.Unlock()
+	}
 	h.rooms[state.ID] = room
 	if _, ok := h.loads[state.ID]; !ok {
 		h.loads[state.ID] = 0
@@ -297,7 +307,8 @@ func (h *Hub) LeaveRoom(roomID string, client *Client) {
 	room, ok := h.rooms[roomID]
 	h.mu.RUnlock()
 	if ok {
-		room.Dispatch(&RoomEvent{Type: EventLeave, Client: client, Timestamp: time.Now()})
+		permanent := client != nil && client.IntentionalLeave
+		room.Dispatch(&RoomEvent{Type: EventLeave, Client: client, Permanent: permanent, Timestamp: time.Now()})
 		h.mu.Lock()
 		if h.loads[roomID] > 0 {
 			h.loads[roomID]--

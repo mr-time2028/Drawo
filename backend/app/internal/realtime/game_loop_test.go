@@ -161,6 +161,54 @@ func TestAbandoningActiveGameDecreasesReputation(t *testing.T) {
 	assert.True(t, room.players[drawer.UserID].Abandoned)
 }
 
+func TestLobbyLeaveRemovesPlayerFromRoster(t *testing.T) {
+	room := NewRoom(&domain.Room{ID: "lobby-leave", State: domain.RoomStateLobby, OwnerID: "owner"}, func(string, string) {}, nil, nil, nil, nil, nil)
+	owner := &Client{ID: "owner-conn", UserID: "owner", Username: "Host", Send: make(chan []byte, 20), Done: make(chan struct{})}
+	guest := &Client{ID: "guest-conn", UserID: "guest:mohs", Username: "mohs", Send: make(chan []byte, 20), Done: make(chan struct{})}
+
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: owner, Timestamp: time.Now()})
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: guest, Timestamp: time.Now()})
+	assert.Len(t, room.players, 2)
+
+	room.handleEvent(&RoomEvent{Type: EventLeave, Client: guest, Permanent: true, Timestamp: time.Now()})
+
+	_, stillThere := room.players[guest.UserID]
+	assert.False(t, stillThere)
+	assert.Len(t, room.players, 1)
+	assert.Equal(t, "owner", room.playerOrder[0])
+	assert.Equal(t, GameStateWaitingForPlayers, room.gameState)
+}
+
+func TestLobbyDisconnectAlsoRemovesPlayer(t *testing.T) {
+	room := NewRoom(&domain.Room{ID: "lobby-drop", State: domain.RoomStateLobby, OwnerID: "owner"}, func(string, string) {}, nil, nil, nil, nil, nil)
+	owner := &Client{ID: "owner-conn", UserID: "owner", Send: make(chan []byte, 10), Done: make(chan struct{})}
+	guest := &Client{ID: "guest-conn", UserID: "guest:mohs", Send: make(chan []byte, 10), Done: make(chan struct{})}
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: owner, Timestamp: time.Now()})
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: guest, Timestamp: time.Now()})
+
+	// Guest socket drop cannot be tracked — drop the seat immediately.
+	room.handleEvent(&RoomEvent{Type: EventLeave, Client: guest, Timestamp: time.Now()})
+
+	_, stillThere := room.players["guest:mohs"]
+	assert.False(t, stillThere)
+}
+
+func TestLoggedInLobbyDisconnectKeepsReconnectSlot(t *testing.T) {
+	room := NewRoom(&domain.Room{ID: "lobby-login", State: domain.RoomStateLobby, OwnerID: "owner"}, func(string, string) {}, nil, nil, nil, nil, nil)
+	owner := &Client{ID: "owner-conn", UserID: "owner", Send: make(chan []byte, 10), Done: make(chan struct{})}
+	friend := &Client{ID: "friend-conn", UserID: "friend", Send: make(chan []byte, 10), Done: make(chan struct{})}
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: owner, Timestamp: time.Now()})
+	room.handleEvent(&RoomEvent{Type: EventJoin, Client: friend, Timestamp: time.Now()})
+
+	room.handleEvent(&RoomEvent{Type: EventLeave, Client: friend, Timestamp: time.Now()})
+
+	player := room.players["friend"]
+	if assert.NotNil(t, player) {
+		assert.False(t, player.IsOnline)
+		assert.Greater(t, player.ReconnectDeadline, int64(0))
+	}
+}
+
 func TestSameUserSecondSocketReplacesOldSocket(t *testing.T) {
 	room := NewRoom(&domain.Room{ID: "dup-room", State: domain.RoomStateLobby}, func(string, string) {}, nil, nil, nil, nil, nil)
 	first := &Client{ID: "first", UserID: "u1", Send: make(chan []byte, 10), Done: make(chan struct{})}
