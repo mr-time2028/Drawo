@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -12,6 +13,7 @@ const (
 	DrawOpErase  = "erase"
 	DrawOpShape  = "shape"
 	DrawOpFill   = "fill"
+	DrawOpText   = "text"
 	DrawOpClear  = "clear"
 	DrawOpUndo   = "undo"
 	DrawOpRedo   = "redo"
@@ -25,10 +27,13 @@ const (
 	ShapeRectangle = "rectangle"
 	ShapeEllipse   = "ellipse"
 	ShapeTriangle  = "triangle"
+	ShapeArrow     = "arrow"
 
 	maxCanvasCoordinate = 4096
 	maxStrokePoints     = 256
 	maxBrushSize        = 64
+	maxTextLength       = 60
+	maxTextFontSize     = 128
 	maxCanvasHistoryOps = 2000
 	maxRedoOpsPerClient = 100
 
@@ -77,6 +82,10 @@ type DrawOperation struct {
 	Size   float64 `json:"size,omitempty"`
 	Points []Point `json:"points,omitempty"`
 
+	// Opacity in (0,1]. Zero means "not set" and renders as fully opaque,
+	// which keeps the field backward compatible with older clients.
+	Opacity float64 `json:"opacity,omitempty"`
+
 	// Shape/fill fields.
 	Shape  string  `json:"shape,omitempty"`
 	X      float64 `json:"x,omitempty"`
@@ -84,6 +93,12 @@ type DrawOperation struct {
 	Width  float64 `json:"width,omitempty"`
 	Height float64 `json:"height,omitempty"`
 	Filled bool    `json:"filled,omitempty"`
+
+	// Text tool fields. Text content is validated for length here and checked
+	// against the current word + bad-word list in the room hot path (the room
+	// owns that context, not this stateless validator).
+	Text     string  `json:"text,omitempty"`
+	FontSize float64 `json:"font_size,omitempty"`
 }
 
 // CanvasSyncPayload is sent to a newly joined client so it can reconstruct the
@@ -114,6 +129,8 @@ func ValidateDrawingPayload(payload json.RawMessage) (DrawOperation, error) {
 		return op, validateShape(op)
 	case DrawOpFill:
 		return op, validateFill(op)
+	case DrawOpText:
+		return op, validateText(op)
 	case DrawOpClear, DrawOpUndo, DrawOpRedo:
 		return op, nil
 	default:
@@ -130,6 +147,9 @@ func validateStroke(op DrawOperation) error {
 	}
 	if !validSize(op.Size) {
 		return errors.New("invalid stroke size")
+	}
+	if !validOpacity(op.Opacity) {
+		return errors.New("invalid stroke opacity")
 	}
 	return validatePoints(op.Points, 2)
 }
@@ -148,10 +168,14 @@ func validateShape(op DrawOperation) error {
 	if !validColor(op.Color) {
 		return errors.New("invalid shape color")
 	}
+	if !validOpacity(op.Opacity) {
+		return errors.New("invalid shape opacity")
+	}
 	if !validCoordinate(op.X) || !validCoordinate(op.Y) {
 		return errors.New("invalid shape coordinate")
 	}
-	if op.Shape == ShapeLine {
+	if op.Shape == ShapeLine || op.Shape == ShapeArrow {
+		// Lines/arrows store the endpoint in width/height (absolute coords).
 		if !validCoordinate(op.Width) || !validCoordinate(op.Height) {
 			return errors.New("invalid line endpoint")
 		}
@@ -169,6 +193,29 @@ func validateFill(op DrawOperation) error {
 	}
 	if !validCoordinate(op.X) || !validCoordinate(op.Y) {
 		return errors.New("invalid fill coordinate")
+	}
+	return nil
+}
+
+func validateText(op DrawOperation) error {
+	trimmed := strings.TrimSpace(op.Text)
+	if trimmed == "" {
+		return errors.New("text is required")
+	}
+	if len([]rune(op.Text)) > maxTextLength {
+		return errors.New("text too long")
+	}
+	if !validColor(op.Color) {
+		return errors.New("invalid text color")
+	}
+	if !validOpacity(op.Opacity) {
+		return errors.New("invalid text opacity")
+	}
+	if !validCoordinate(op.X) || !validCoordinate(op.Y) {
+		return errors.New("invalid text coordinate")
+	}
+	if op.FontSize <= 0 || op.FontSize > maxTextFontSize {
+		return errors.New("invalid text font size")
 	}
 	return nil
 }
@@ -199,11 +246,16 @@ func validTool(tool string) bool {
 
 func validShape(shape string) bool {
 	switch shape {
-	case ShapeLine, ShapeRectangle, ShapeEllipse, ShapeTriangle:
+	case ShapeLine, ShapeRectangle, ShapeEllipse, ShapeTriangle, ShapeArrow:
 		return true
 	default:
 		return false
 	}
+}
+
+// validOpacity accepts the zero value ("not set" → opaque) or (0,1].
+func validOpacity(opacity float64) bool {
+	return opacity == 0 || (opacity > 0 && opacity <= 1)
 }
 
 func validColor(color string) bool {

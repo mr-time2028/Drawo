@@ -142,7 +142,8 @@ export function useRoomSocket(roomId: string | undefined, inviteCode?: string) {
         if (cancelled) return;
         setState((s) => ({
           ...s,
-          status: st === 'open' ? 'open' : st === 'closed' ? 'closed' : st === 'error' ? 'error' : 'connecting',
+          status:
+            st === 'open' ? 'open' : st === 'closed' ? 'closed' : st === 'error' ? 'error' : 'connecting',
           error: detail ?? s.error,
         }));
       },
@@ -150,7 +151,11 @@ export function useRoomSocket(roomId: string | undefined, inviteCode?: string) {
       .then((sock) => {
         if (cancelled) {
           // Clean up if the effect was torn down mid-handshake.
-          try { sock.close(); } catch { /* noop */ }
+          try {
+            sock.close();
+          } catch {
+            /* noop */
+          }
           return;
         }
         socketRef.current = sock;
@@ -167,7 +172,11 @@ export function useRoomSocket(roomId: string | undefined, inviteCode?: string) {
     return () => {
       cancelled = true;
       if (socketRef.current) {
-        try { socketRef.current.close(); } catch { /* noop */ }
+        try {
+          socketRef.current.close();
+        } catch {
+          /* noop */
+        }
         socketRef.current = null;
       }
     };

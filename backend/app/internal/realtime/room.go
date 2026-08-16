@@ -182,6 +182,12 @@ func (r *Room) applyDrawingEvent(e *RoomEvent) (json.RawMessage, bool) {
 		r.sendError(e.Client, errors.WSErrInvalidDraw, err.Error())
 		return nil, false
 	}
+	if op.Op == DrawOpText && !r.allowCanvasText(op.Text) {
+		// The drawer must not be able to write the answer (or a prohibited
+		// word) on the canvas with the text tool.
+		r.sendError(e.Client, errors.WSErrInvalidDraw, "text is not allowed")
+		return nil, false
+	}
 	if err := r.allowDrawingOperation(e.Client.ID, op); err != nil {
 		r.sendError(e.Client, errors.WSErrDrawRateLimited, err.Error())
 		return nil, false
@@ -641,6 +647,24 @@ func (r *Room) allowChat(clientID string) bool {
 	return state.count <= maxChatMessagesPerWind
 }
 
+// allowCanvasText rejects canvas text that reveals the current word or
+// contains a prohibited word. Uses the same normalization as guesses so the
+// drawer cannot dodge the filter with spacing/diacritics tricks.
+func (r *Room) allowCanvasText(text string) bool {
+	if r.containsBadWord(text) {
+		return false
+	}
+	if r.currentWord == nil {
+		return true
+	}
+	normalizedWord := NormalizeGuess(r.currentWord.Text, r.state.Language)
+	if normalizedWord == "" {
+		return true
+	}
+	normalizedText := NormalizeGuess(text, r.state.Language)
+	return !strings.Contains(normalizedText, normalizedWord)
+}
+
 func (r *Room) containsBadWord(text string) bool {
 	if r.contentRepo == nil {
 		return false
@@ -703,6 +727,22 @@ func (r *Room) handleGameEvent(e *RoomEvent) {
 		r.state.CurrentRound = 0 // startWordSelection bumps this to 1 on its first tick.
 		_ = r.persist()
 		r.startCountdown()
+	case "play_again":
+		// Owner restarts a finished game with the same room settings. Seats
+		// that survived to game_end keep their place; scores reset.
+		if r.gameState != GameStateGameEnd {
+			r.sendError(e.Client, errors.WSErrUnsupportedGameEvent, "game is not finished")
+			return
+		}
+		if e.Client.UserID != r.state.OwnerID {
+			r.sendError(e.Client, errors.WSErrUnsupportedGameEvent, "only the room owner can restart the game")
+			return
+		}
+		if r.onlinePlayerCount() < r.minPlayers() {
+			r.sendError(e.Client, errors.WSErrUnsupportedGameEvent, "need at least 2 players to start")
+			return
+		}
+		r.restartGame()
 	case "choose_word":
 		var payload ChooseWordPayload
 		if err := json.Unmarshal(e.Payload, &payload); err != nil {
@@ -737,6 +777,30 @@ func (r *Room) persist() error {
 	return r.roomRepo.Save(context.Background(), r.state)
 }
 
+// restartGame resets per-match state (scores, rounds, canvas, word) while
+// keeping the same settings and seats, then kicks off a fresh countdown.
+func (r *Room) restartGame() {
+	for _, player := range r.players {
+		player.Score = 0
+		player.GuessedWord = false
+		player.CorrectGuesses = 0
+		player.SuccessfulDrawings = 0
+		player.Abandoned = false
+	}
+	r.state.CurrentRound = 0
+	r.state.CurrentDrawerID = ""
+	r.currentWord = nil
+	r.suggestedWords = nil
+	r.roundDrawingSucceeded = false
+	r.canvasOps = r.canvasOps[:0]
+	r.redoOps = make(map[string][]DrawOperation)
+	r.drawSeq = 0
+	r.state.State = domain.RoomStatePlaying
+	_ = r.persist()
+	r.broadcastSystem(EventClearCanvas, nil)
+	r.startCountdown()
+}
+
 func (r *Room) startCountdown() {
 	r.gameState = GameStateCountdown
 	r.state.State = domain.RoomStatePlaying
@@ -766,6 +830,11 @@ func (r *Room) startWordSelection() {
 	r.drawSeq = 0
 	r.clearTimer()
 	r.setTimer(wordSelectionDuration)
+	// Tell every connected client to wipe the previous round's drawing —
+	// the server-side op log was just reset, but clients that stayed in the
+	// room (i.e. everyone except fresh joiners) would otherwise keep the old
+	// bitmap until the next canvas_sync.
+	r.broadcastSystem(EventClearCanvas, nil)
 	r.sendWordSuggestions()
 	r.broadcastGameState()
 }
@@ -951,7 +1020,24 @@ func (r *Room) broadcastGameState() {
 }
 
 func (r *Room) broadcastGameStateWithWord(word string) {
-	r.broadcastSystem(EventGameState, GameStatePayload{State: r.gameState, RoomID: r.state.ID, Language: r.state.Language, Round: r.state.CurrentRound, MaxRounds: r.state.MaxRounds, DrawerID: r.state.CurrentDrawerID, Players: r.playerSnapshot(), MinPlayers: r.minPlayers(), MaxPlayers: r.maxPlayers(), EndsAt: r.endsAtUnix(), WordRevealed: word})
+	r.broadcastSystem(EventGameState, GameStatePayload{State: r.gameState, RoomID: r.state.ID, Language: r.state.Language, Round: r.state.CurrentRound, MaxRounds: r.state.MaxRounds, DrawerID: r.state.CurrentDrawerID, Players: r.playerSnapshot(), MinPlayers: r.minPlayers(), MaxPlayers: r.maxPlayers(), EndsAt: r.endsAtUnix(), WordRevealed: word, WordLengths: r.currentWordLengths()})
+}
+
+// currentWordLengths exposes only the shape of the hidden word (rune count per
+// space-separated word) so guessers can render masked blanks.
+func (r *Room) currentWordLengths() []int {
+	if r.currentWord == nil || r.gameState != GameStateDrawing {
+		return nil
+	}
+	parts := strings.Fields(r.currentWord.Text)
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]int, 0, len(parts))
+	for _, part := range parts {
+		out = append(out, len([]rune(part)))
+	}
+	return out
 }
 
 func (r *Room) playerSnapshot() []PlayerState {

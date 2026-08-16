@@ -30,13 +30,7 @@ export function Avatar({ size = 'md', src, alt = '', fallbackName, className, ..
       aria-hidden={!alt}
     >
       {hasImage ? (
-        <img
-          src={src}
-          alt={alt}
-          onError={() => setErrored(true)}
-          className="drawo-avatar-image"
-          {...props}
-        />
+        <img src={src} alt={alt} onError={() => setErrored(true)} className="drawo-avatar-image" {...props} />
       ) : isDataUrlFallback ? (
         <img src={fallbackName} alt="" className="drawo-avatar-image" aria-hidden />
       ) : (

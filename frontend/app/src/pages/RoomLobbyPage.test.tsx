@@ -34,20 +34,42 @@ vi.mock('@tanstack/react-router', async () => {
 // Tests that care about socket-driven state can push updates via setSocketState.
 let setSocketState: (patch: Record<string, unknown>) => void;
 const sendMock = vi.fn();
-const annotateOwnerMock = vi.fn();
+const sendStartMock = vi.fn();
+const sendLeaveMock = vi.fn();
 
-vi.mock('@/api/useRoomSocket', () => ({
-  useRoomSocket: () => {
+vi.mock('@/game/useGameChannel', () => ({
+  useGameChannel: () => {
     const [state, setState] = useState({
       status: 'open',
       error: '',
+      errorCode: '',
       gameState: 'waiting_for_players',
+      round: 0,
+      maxRounds: 0,
+      drawerID: '',
       players: [],
       minPlayers: 2,
       maxPlayers: 8,
+      endsAt: 0,
+      wordRevealed: '',
+      wordLengths: [],
+      myWord: '',
+      suggestions: [],
+      chat: [],
     });
-    setSocketState = (patch) => setState((s: any) => ({ ...s, ...patch }));
-    return { ...state, send: sendMock, annotateOwner: annotateOwnerMock };
+    setSocketState = (patch) => setState((s) => ({ ...s, ...(patch as Partial<typeof s>) }));
+    return {
+      ...state,
+      engine: { canvas: document.createElement('canvas'), onChange: () => () => {}, destroy: () => {} },
+      sendDraw: sendMock,
+      sendChat: sendMock,
+      sendStart: sendStartMock,
+      sendChooseWord: sendMock,
+      sendPlayAgain: sendMock,
+      sendLeave: sendLeaveMock,
+      sendReport: sendMock,
+      clearError: () => {},
+    };
   },
 }));
 
@@ -92,7 +114,8 @@ beforeEach(async () => {
   navigate.mockReset();
   writeText.mockReset();
   sendMock.mockReset();
-  annotateOwnerMock.mockReset();
+  sendStartMock.mockReset();
+  sendLeaveMock.mockReset();
   mock.reset();
 });
 
@@ -173,19 +196,36 @@ describe('RoomLobbyPage', () => {
     // Simulate a second player joining so the Start button enables (needs ≥2).
     setSocketState({
       players: [
-        { user_id: 'u-1', username: 'hamid', score: 0, is_drawer: false, is_online: true, is_owner: true, is_guest: false },
-        { user_id: 'u-2', username: 'friend', score: 0, is_drawer: false, is_online: true, is_owner: false, is_guest: false },
+        {
+          user_id: 'u-1',
+          username: 'hamid',
+          score: 0,
+          is_drawer: false,
+          is_online: true,
+          is_owner: true,
+          is_guest: false,
+        },
+        {
+          user_id: 'u-2',
+          username: 'friend',
+          score: 0,
+          is_drawer: false,
+          is_online: true,
+          is_owner: false,
+          is_guest: false,
+        },
       ],
     });
     const startBtn = await screen.findByRole('button', { name: /start match/i });
     await waitFor(() => expect(startBtn).not.toBeDisabled());
     fireEvent.click(startBtn);
     await waitFor(() => {
-      expect(sendMock).toHaveBeenCalledWith('game', { event: 'start' });
+      expect(sendStartMock).toHaveBeenCalled();
     });
-    // Simulate the hub flipping to countdown.
+    // Simulate the hub flipping to countdown — the page now swaps the lobby
+    // for the in-game view, which shows the countdown overlay.
     setSocketState({ gameState: 'countdown' });
-    expect(await screen.findByRole('button', { name: /game in progress/i })).toBeInTheDocument();
+    expect(await screen.findByText(/game starting/i)).toBeInTheDocument();
   });
 
   it('navigates back when room fails to load', async () => {

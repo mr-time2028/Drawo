@@ -71,6 +71,16 @@ func (r *Room) handleReportEvent(client *Client, payload ReportPayload) {
 	}
 	r.reportKeys[key] = struct{}{}
 
+	// Guests have no users-table row and their "guest:<uuid>" IDs are not
+	// valid UUIDs, so a DB report row cannot reference them (reporter_id /
+	// reported_id are UUID FKs). Apply the in-room aggregated penalty and
+	// acknowledge, but skip persistence when either side is a guest.
+	if domain.IsGuestID(client.UserID) || domain.IsGuestID(payload.ReportedUserID) {
+		r.applyAggregatedReportPenalty(payload.ReportedUserID, payload.Reason, client.UserID)
+		r.sendSystem(client, EventGame, ReportSubmittedPayload{Event: "report_submitted", ReportID: ""})
+		return
+	}
+
 	evidenceJSON, _ := json.Marshal(r.buildReportEvidence(client.UserID, payload.ReportedUserID))
 	report := &domain.Report{
 		ID:         uuid.New().String(),

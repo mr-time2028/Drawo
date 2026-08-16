@@ -131,14 +131,7 @@ export function StartMatchDrawer({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        'start-match-drawer-root',
-        open && 'is-open',
-      )}
-      aria-hidden={!open}
-    >
+    <div ref={containerRef} className={cn('start-match-drawer-root', open && 'is-open')} aria-hidden={!open}>
       <div className="start-match-backdrop" onClick={onClose} aria-hidden="true" />
       <div
         className="start-match-drawer"

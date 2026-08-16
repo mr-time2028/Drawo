@@ -111,7 +111,14 @@ describe('useRoomSocket', () => {
           state: 'waiting_for_players',
           players: [
             { user_id: 'u1', username: 'Owner', score: 0, is_drawer: false, is_online: true, is_owner: true },
-            { user_id: 'guest:g1', username: 'Alice', score: 0, is_drawer: false, is_online: true, is_guest: true },
+            {
+              user_id: 'guest:g1',
+              username: 'Alice',
+              score: 0,
+              is_drawer: false,
+              is_online: true,
+              is_guest: true,
+            },
           ],
           min_players: 3,
           max_players: 10,
@@ -136,7 +143,10 @@ describe('useRoomSocket', () => {
   it('uses guest session when present and room matches', async () => {
     vi.mocked(authMod.readAccessToken).mockReturnValue(null);
     vi.mocked(guestMod.readGuestSession).mockReturnValue({
-      guestToken: 'gt', guestID: 'guest:g', nickname: 'Bob', roomID: 'r2',
+      guestToken: 'gt',
+      guestID: 'guest:g',
+      nickname: 'Bob',
+      roomID: 'r2',
     });
     makeFakeSocket();
     renderHook(() => useRoomSocket('r2'));

@@ -23,10 +23,9 @@ function readEnv(): FrontendEnv {
   // If WS URL is not provided, derive it from the current origin — this
   // matches the dev proxy and production Nginx paths. If VITE_API_BASE_URL
   // is set explicitly, derive WS from that too.
-  const explicit = typeof raw.VITE_API_BASE_URL === 'string' && raw.VITE_API_BASE_URL ? raw.VITE_API_BASE_URL : '';
-  const derivedFromApi = explicit
-    ? `${explicit.replace(/^http/, 'ws')}/api/v1/ws`
-    : null;
+  const explicit =
+    typeof raw.VITE_API_BASE_URL === 'string' && raw.VITE_API_BASE_URL ? raw.VITE_API_BASE_URL : '';
+  const derivedFromApi = explicit ? `${explicit.replace(/^http/, 'ws')}/api/v1/ws` : null;
   const wsUrl =
     raw.VITE_WS_URL ||
     derivedFromApi ||

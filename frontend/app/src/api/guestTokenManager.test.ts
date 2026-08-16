@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  clearGuestSession,
-  readGuestSession,
-  readGuestToken,
-  saveGuestSession,
-} from './guestTokenManager';
+import { clearGuestSession, readGuestSession, readGuestToken, saveGuestSession } from './guestTokenManager';
 
 afterEach(() => {
   localStorage.clear();

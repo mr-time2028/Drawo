@@ -20,13 +20,29 @@ describe('StartMatchDrawer', () => {
   });
 
   it('is hidden when closed', () => {
-    render(<StartMatchDrawer open={false} onClose={() => {}} onOpenPrivate={() => {}} onStartPublic={() => {}} anchorSide="end" />);
+    render(
+      <StartMatchDrawer
+        open={false}
+        onClose={() => {}}
+        onOpenPrivate={() => {}}
+        onStartPublic={() => {}}
+        anchorSide="end"
+      />,
+    );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('renders both language and game-type sections when open and uses persisted game language', () => {
     localStorage.setItem(GAME_LANG_KEY, 'en');
-    render(<StartMatchDrawer open={true} onClose={() => {}} onOpenPrivate={() => {}} onStartPublic={() => {}} anchorSide="end" />);
+    render(
+      <StartMatchDrawer
+        open={true}
+        onClose={() => {}}
+        onOpenPrivate={() => {}}
+        onStartPublic={() => {}}
+        anchorSide="end"
+      />,
+    );
     expect(screen.getByRole('dialog', { name: /start match/i })).toBeInTheDocument();
     expect(screen.getByText(/game language/i)).toBeInTheDocument();
     expect(screen.getByText(/game type/i)).toBeInTheDocument();
@@ -37,7 +53,15 @@ describe('StartMatchDrawer', () => {
 
   it('closes via X, backdrop click, Escape key, and Cancel button', () => {
     const onClose = vi.fn();
-    render(<StartMatchDrawer open={true} onClose={onClose} onOpenPrivate={() => {}} onStartPublic={() => {}} anchorSide="end" />);
+    render(
+      <StartMatchDrawer
+        open={true}
+        onClose={onClose}
+        onOpenPrivate={() => {}}
+        onStartPublic={() => {}}
+        anchorSide="end"
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
     fireEvent.click(document.querySelector('.start-match-backdrop')!);
@@ -48,7 +72,15 @@ describe('StartMatchDrawer', () => {
 
   it('switches GAME language independently from UI language and persists it', () => {
     // Start with UI language English and no stored game language (default 'fa').
-    render(<StartMatchDrawer open={true} onClose={() => {}} onOpenPrivate={() => {}} onStartPublic={() => {}} anchorSide="end" />);
+    render(
+      <StartMatchDrawer
+        open={true}
+        onClose={() => {}}
+        onOpenPrivate={() => {}}
+        onStartPublic={() => {}}
+        anchorSide="end"
+      />,
+    );
     const faBtn = screen.getByRole('radio', { name: /فارسی/i });
     const enBtn = screen.getByRole('radio', { name: /english/i });
     // Default is fa.
@@ -97,7 +129,15 @@ describe('StartMatchDrawer', () => {
 
   it('no escape listener while closed', () => {
     const onClose = vi.fn();
-    render(<StartMatchDrawer open={false} onClose={onClose} onOpenPrivate={() => {}} onStartPublic={() => {}} anchorSide="end" />);
+    render(
+      <StartMatchDrawer
+        open={false}
+        onClose={onClose}
+        onOpenPrivate={() => {}}
+        onStartPublic={() => {}}
+        anchorSide="end"
+      />,
+    );
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
   });

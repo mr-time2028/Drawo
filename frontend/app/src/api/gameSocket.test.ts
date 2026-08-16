@@ -104,9 +104,16 @@ async function waitForAuth(ws: FakeWS) {
     if (ws.sent.some((f) => f.type === 'auth')) return;
     await new Promise((r) => setTimeout(r, 5));
   }
-  throw new Error('auth frame not sent; sent=' + JSON.stringify(ws.sent.map((f) => f.type)) +
-    ' readyState=' + ws.readyState + ' onopen=' + !!ws.onopen +
-    ' acquireCalls=' + acquireSpy.mock.calls.length);
+  throw new Error(
+    'auth frame not sent; sent=' +
+      JSON.stringify(ws.sent.map((f) => f.type)) +
+      ' readyState=' +
+      ws.readyState +
+      ' onopen=' +
+      !!ws.onopen +
+      ' acquireCalls=' +
+      acquireSpy.mock.calls.length,
+  );
 }
 
 async function waitForJoin(ws: FakeWS) {
@@ -124,7 +131,9 @@ async function completeHandshake(ws: FakeWS, guest = false) {
   if (!guest) {
     expect(ws.sent.find((f) => f.type === 'auth')?.payload).toEqual({ access_token: 'access-xyz' });
   } else {
-    expect(ws.sent.find((f) => f.type === 'auth')?.payload).toMatchObject({ guest_token: expect.any(String) });
+    expect(ws.sent.find((f) => f.type === 'auth')?.payload).toMatchObject({
+      guest_token: expect.any(String),
+    });
   }
   ws.receive({ type: 'auth_ok' });
   await waitForJoin(ws);
@@ -171,7 +180,13 @@ describe('connectGameSocket', () => {
   it('happy path: registered user authenticates and joins a public room', async () => {
     const onStatus = vi.fn();
     const onMessage = vi.fn();
-    const sockP = connectGameSocket({ mode: 'public', language: 'en', categoryID: 'cat', onStatusChange: onStatus, onMessage });
+    const sockP = connectGameSocket({
+      mode: 'public',
+      language: 'en',
+      categoryID: 'cat',
+      onStatusChange: onStatus,
+      onMessage,
+    });
     const ws = FakeWS.last();
     await completeHandshake(ws);
     const sock = await sockP;
@@ -346,13 +361,19 @@ describe('getGuestAuthForRoom', () => {
   });
   it('returns null when guest session is bound to a different room', () => {
     vi.mocked(guestMod.readGuestSession).mockReturnValue({
-      guestToken: 't', guestID: 'g', nickname: 'n', roomID: 'other',
+      guestToken: 't',
+      guestID: 'g',
+      nickname: 'n',
+      roomID: 'other',
     });
     expect(getGuestAuthForRoom('r1')).toBeNull();
   });
   it('returns the session when room matches', () => {
     vi.mocked(guestMod.readGuestSession).mockReturnValue({
-      guestToken: 't', guestID: 'g', nickname: 'n', roomID: 'r1',
+      guestToken: 't',
+      guestID: 'g',
+      nickname: 'n',
+      roomID: 'r1',
     });
     expect(getGuestAuthForRoom('r1')?.roomID).toBe('r1');
   });

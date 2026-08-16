@@ -14,8 +14,9 @@
  */
 
 import { env } from '@/config/env';
+import { useAuthStore } from '@/stores/authStore';
 import { readGuestSession } from './guestTokenManager';
-import { wsAcquireToken, wsReleaseToken } from './authTokenManager';
+import { getValidAccessToken, wsAcquireToken, wsReleaseToken } from './authTokenManager';
 
 export type SocketStatus = 'idle' | 'connecting' | 'authenticating' | 'joining' | 'open' | 'closed' | 'error';
 
@@ -27,8 +28,7 @@ export type ServerEnvelope = {
 };
 
 type AuthMode =
-  | { kind: 'user' }
-  | { kind: 'guest'; guestToken: string; roomID: string; nickname: string; guestID: string };
+  { kind: 'user' } | { kind: 'guest'; guestToken: string; roomID: string; nickname: string; guestID: string };
 
 export type ConnectOptions = {
   mode?: 'public' | 'private' | 'reconnect';
@@ -78,11 +78,15 @@ export async function connectGameSocket(opts: ConnectOptions): Promise<GameSocke
     ws = socket;
     socket.binaryType = 'arraybuffer';
 
+    let unsubscribeTokenSync: (() => void) | null = null;
+
     const cleanup = () => {
       socket.onopen = null;
       socket.onmessage = null;
       socket.onerror = null;
       socket.onclose = null;
+      unsubscribeTokenSync?.();
+      unsubscribeTokenSync = null;
       if (authMode.kind === 'user') {
         wsReleaseToken();
       }
@@ -98,6 +102,23 @@ export async function connectGameSocket(opts: ConnectOptions): Promise<GameSocke
         }),
       );
     };
+
+    // Keep the socket authenticated for as long as it lives: whenever the
+    // token manager rotates the access token (the proactive refresh timer
+    // fires ~60s before expiry while a socket is open), immediately re-auth
+    // over the SAME connection. Combined with the server's `auth_required`
+    // nudge below, a user idling in a lobby is never kicked by token expiry.
+    if (authMode.kind === 'user') {
+      let lastSentToken: string | null = null;
+      unsubscribeTokenSync = useAuthStore.subscribe((state) => {
+        const token = state.accessToken;
+        if (!token || token === lastSentToken) return;
+        if (socket.readyState === WebSocket.OPEN) {
+          lastSentToken = token;
+          send('auth', { access_token: token });
+        }
+      });
+    }
 
     let settled = false;
     const fail = (msg: string) => {
@@ -117,7 +138,7 @@ export async function connectGameSocket(opts: ConnectOptions): Promise<GameSocke
       setStatus('joining');
       let mode = opts.mode ?? 'public';
       let roomID = opts.roomID;
-      let inviteCode = opts.inviteCode;
+      const inviteCode = opts.inviteCode;
 
       if (authMode.kind === 'guest') {
         // Guests are room-bound — always join their specific room.
@@ -168,6 +189,19 @@ export async function connectGameSocket(opts: ConnectOptions): Promise<GameSocke
           if (!settled) {
             // Still in handshake — next frame must be join.
             doJoin();
+          }
+          break;
+        case 'auth_required':
+          // Server warns the access token is close to expiry. Refresh in the
+          // background and re-auth over the SAME socket — the user must never
+          // notice (no reconnect, no seat loss). Guests can't refresh; their
+          // 24h token comfortably outlives any match.
+          if (authMode.kind === 'user') {
+            void getValidAccessToken({ silent: true }).then((token) => {
+              if (token && socket.readyState === WebSocket.OPEN) {
+                send('auth', { access_token: token });
+              }
+            });
           }
           break;
         case 'joined':

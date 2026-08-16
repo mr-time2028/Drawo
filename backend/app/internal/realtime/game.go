@@ -75,6 +75,10 @@ type GameStatePayload struct {
 	MaxPlayers   int           `json:"max_players"`
 	EndsAt       int64         `json:"ends_at,omitempty"`
 	WordRevealed string        `json:"word,omitempty"`
+	// WordLength lets guessers render masked blanks ("_ _ _") during the
+	// drawing phase without ever learning the word itself. Space-separated
+	// per-word rune counts, e.g. "ice cream" → [3, 5].
+	WordLengths []int `json:"word_lengths,omitempty"`
 }
 
 type GameEventPayload struct {

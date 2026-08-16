@@ -18,7 +18,16 @@ type ModalProps = {
   ariaLabel?: string;
 };
 
-export function Modal({ open, onClose, title, description, children, footer, className, ariaLabel }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+  className,
+  ariaLabel,
+}: ModalProps) {
   // Close on Escape. We listen in the capture phase and stopPropagation so
   // that when multiple modals/drawers are mounted (e.g. StartMatchDrawer is
   // still in the tree while PrivateRoomModal opens) the Escape only closes

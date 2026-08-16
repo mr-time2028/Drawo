@@ -7,10 +7,11 @@ import { toast } from 'sonner';
 import { buildInviteURL, closeRoom, getRoom, leaveRoom, type Room } from '@/api/room';
 import { readGuestSession, clearGuestSession } from '@/api/guestTokenManager';
 import { getProfile } from '@/api/user';
-import { useRoomSocket } from '@/api/useRoomSocket';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/Card';
+import { GameView } from '@/game/GameView';
+import { useGameChannel } from '@/game/useGameChannel';
 
 export function RoomLobbyPage() {
   const { t } = useTranslation();
@@ -68,14 +69,10 @@ export function RoomLobbyPage() {
 
   // Open the WebSocket once we have the room metadata. For private rooms the
   // backend expects either room_id or invite_code in the join payload; we send
-  // room_id (faster, one less lookup on the server).
-  const socket = useRoomSocket(room?.id, room?.invite_code);
-
-  // Annotate players with the owner flag once both the socket player list and
-  // room metadata are known.
-  useEffect(() => {
-    if (room?.owner_id) socket.annotateOwner(room.owner_id);
-  }, [room?.owner_id, socket]);
+  // room_id (faster, one less lookup on the server). The channel also carries
+  // the full in-game state (canvas ops, chat, word events) so the same socket
+  // serves both the lobby AND the game screen with no reconnect between them.
+  const socket = useGameChannel(room?.id, room?.invite_code);
 
   // When the server reports an error, surface it as a toast.
   useEffect(() => {
@@ -109,9 +106,20 @@ export function RoomLobbyPage() {
   // REST room.state uses: lobby, playing, finished.
   const restState = room?.state ?? 'lobby';
   const socketLive = socket.status === 'open' && socket.gameState;
-  const gameState = socketLive ? socket.gameState : (restState === 'playing' ? 'countdown' : 'waiting_for_players');
+  const gameState = socketLive
+    ? socket.gameState
+    : restState === 'playing'
+      ? 'countdown'
+      : 'waiting_for_players';
   const isInLobby = gameState === 'waiting_for_players';
-  const isPlaying = ['countdown', 'word_selection', 'drawing', 'round_end', 'leaderboard', 'drawer_disconnected'].includes(gameState);
+  const isPlaying = [
+    'countdown',
+    'word_selection',
+    'drawing',
+    'round_end',
+    'leaderboard',
+    'drawer_disconnected',
+  ].includes(gameState);
   // Guests cannot reconnect (a new invite join is a new identity). Hide any
   // leftover offline guest row. Logged-in players stay visible as offline
   // while we wait for them to come back.
@@ -142,7 +150,7 @@ export function RoomLobbyPage() {
     // The owner starts the countdown over the WebSocket. The hub transitions
     // the room through countdown → word_selection → drawing on its own and
     // broadcasts a fresh game_state as soon as it does.
-    socket.send('game', { event: 'start' });
+    socket.sendStart();
     // Give the server one tick to flip state, then clear the loading flag.
     // Any error frames will surface via the socket's error toast effect.
     setTimeout(() => setStarting(false), 500);
@@ -153,7 +161,7 @@ export function RoomLobbyPage() {
     setLeaving(true);
     try {
       // Tell the room to drop this seat immediately (not "offline / reconnect").
-      socket.send('leave');
+      socket.sendLeave();
       if (isGuest) {
         clearGuestSession();
         toast.success(t('rooms.left', 'You left the room.'));
@@ -192,6 +200,28 @@ export function RoomLobbyPage() {
     );
   }
 
+  // Once the match is live (any in-game state), swap the lobby for the game
+  // screen. The same socket/channel keeps running underneath, so the canvas
+  // has already received canvas_sync and no ops are lost in the transition.
+  if (socket.status === 'open' && (isPlaying || gameState === 'game_end')) {
+    return (
+      <GameView
+        channel={socket}
+        currentUserID={currentUserID}
+        displayName={displayName}
+        onExit={() => {
+          socket.sendLeave();
+          if (isGuest) {
+            clearGuestSession();
+            void navigate({ to: '/', replace: true });
+          } else {
+            void navigate({ to: '/app', replace: true });
+          }
+        }}
+      />
+    );
+  }
+
   const wordSourceLabel =
     room.word_source === 'custom'
       ? t('rooms.customWords', 'Custom categories & words')
@@ -223,7 +253,11 @@ export function RoomLobbyPage() {
                   {isInLobby ? t('rooms.lobby', 'lobby') : gameState}
                 </span>
                 <span className="room-connection-status" data-status={socket.status}>
-                  {socket.status === 'open' ? <Wifi size={12} aria-hidden /> : <WifiOff size={12} aria-hidden />}
+                  {socket.status === 'open' ? (
+                    <Wifi size={12} aria-hidden />
+                  ) : (
+                    <WifiOff size={12} aria-hidden />
+                  )}
                   {connectionStatusLabel}
                 </span>
               </CardDescription>
@@ -301,8 +335,7 @@ export function RoomLobbyPage() {
               <ul className="room-players-list" tabIndex={players.length > 5 ? 0 : undefined}>
                 {players.map((p) => {
                   const isMe = p.user_id === currentUserID;
-                  const isGuestPlayer =
-                    p.is_guest || p.user_id.startsWith('guest:') || (isMe && isGuest);
+                  const isGuestPlayer = p.is_guest || p.user_id.startsWith('guest:') || (isMe && isGuest);
                   const name = isMe
                     ? displayName || p.username || t('rooms.you', 'You')
                     : p.username || p.user_id.slice(0, 8);

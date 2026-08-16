@@ -1,0 +1,807 @@
+/* ==========================================================================
+ * In-game screen: drawing board, tools, chat, overlays.
+ * Style direction follows the board prototype (white cards on the blue
+ * gradient app background, 7px+ radii, #4A98F7 accent) modernized to the
+ * app's token system.
+ * ========================================================================== */
+
+/* While a game is on screen, the whole page behind it turns the prototype
+ * blue (frontend/app/prototypes/board-prototype: #4A98F7) in light mode.
+ * Dark mode keeps the app's usual dark gradient. */
+.app-shell:has(.game-view) {
+  background: #4a98f7;
+}
+
+:root[data-theme='dark'] .app-shell:has(.game-view) {
+  background: none;
+}
+
+.game-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(1360px, 100%);
+  margin-inline: auto;
+  padding: 0.6rem clamp(0.5rem, 2vw, 1.25rem) 0.8rem;
+}
+
+/* Desktop: pin the screen to the viewport height so nothing scrolls — the
+ * board scales itself to the remaining space instead. */
+@media (min-width: 1081px) {
+  .game-view {
+    height: calc(100vh - var(--app-header-height));
+    overflow: hidden;
+  }
+}
+
+/* ----- header ----- */
+
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--elev-1);
+}
+
+.game-round {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.game-round strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.game-round-sep {
+  margin-inline: 2px;
+}
+
+.game-word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+.game-word-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.game-word-value {
+  font-weight: 900;
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46vw;
+}
+
+.game-word.is-masked .game-word-value {
+  letter-spacing: 0.2em;
+}
+
+.game-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sky-500) 12%, transparent);
+  color: var(--sky-700, #2f7fe3);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.game-timer.is-urgent {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+  animation: game-timer-pulse 1s ease-in-out infinite;
+}
+
+@keyframes game-timer-pulse {
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+/* ----- layout ----- */
+
+/* Physical order is FIXED and never flips with the UI language:
+ * players (left) | board (center) | chat (right). The container carries
+ * dir="ltr" in the JSX; text inside localizes on its own. */
+.game-layout {
+  display: grid;
+  grid-template-columns: clamp(190px, 18vw, 240px) minmax(0, 1fr) clamp(230px, 22vw, 300px);
+  gap: 0.75rem;
+  /* Single row hugging its content: the BOARD column (board + toolbar)
+   * defines the row height; players/chat stretch to exactly that height.
+   * `contain: size` on the side panels stops their own content from
+   * inflating the row. */
+  align-content: start;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.game-board-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ----- drawing board -----
+ * Board on top, tool palette docked at the BOTTOM of the board. The board
+ * derives its size from the leftover viewport height so the page never
+ * scrolls during play. */
+
+.drawing-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  /* Hug the content: board directly under the header (no dead gap above),
+   * toolbar directly under the board. */
+  height: auto;
+  min-height: 0;
+}
+
+.board-stage {
+  order: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.board-viewport {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  /* Fit without distortion or page scroll: full width unless the 4:3 height
+   * would overflow the space left after navbar + in-game header + bottom
+   * toolbar (~245px combined). */
+  width: min(100%, calc((100vh - var(--app-header-height) - 245px) * 4 / 3));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: var(--elev-1);
+  touch-action: none; /* we own all pointer gestures */
+  user-select: none;
+}
+
+.board-viewport.is-drawing {
+  cursor: crosshair;
+}
+
+.board-viewport.is-precise {
+  cursor: copy;
+}
+
+.board-viewport.is-panning {
+  cursor: grab;
+}
+
+.board-viewport.is-panning:active {
+  cursor: grabbing;
+}
+
+.board-viewport.is-readonly {
+  cursor: default;
+}
+
+.board-transform {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+}
+
+.board-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.board-layer-preview {
+  pointer-events: none;
+}
+
+.board-text-input {
+  position: absolute;
+  transform: translateY(-2px);
+  min-width: 8ch;
+  max-width: 60%;
+  padding: 0 2px;
+  border: 1px dashed var(--sky-500);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  font-family: Arial, 'Segoe UI', Tahoma, sans-serif;
+  line-height: 1.15;
+  outline: none;
+}
+
+/* ----- toolbar (horizontal, docked at the bottom of the board) ----- */
+
+.board-tools {
+  order: 2;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem 0.65rem;
+  width: 100%;
+  flex: none;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--elev-1);
+}
+
+.board-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding-inline-end: 0.65rem;
+  border-inline-end: 1px solid var(--border);
+}
+
+.board-tool-group:last-child {
+  border-inline-end: none;
+  padding-inline-end: 0;
+}
+
+.board-tool {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.board-tool:hover {
+  background: color-mix(in srgb, var(--sky-500) 10%, transparent);
+  color: var(--sky-700, #2f7fe3);
+}
+
+.board-tool.is-active {
+  background: color-mix(in srgb, var(--sky-500) 16%, transparent);
+  border-color: color-mix(in srgb, var(--sky-500) 45%, transparent);
+  color: var(--sky-700, #2f7fe3);
+}
+
+.board-tool-danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.board-sliders {
+  gap: 0.7rem;
+}
+
+/* Sliders: fixed usable width, big hit target, RTL-proof. */
+.board-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  direction: ltr; /* value always grows left→right, matching the canvas */
+  color: var(--muted);
+}
+
+.board-slider input[type='range'] {
+  /* The app-wide `input` rule (padding/border/radius for text fields) also
+   * hits range inputs and pads the track inward — the thumb then never
+   * reaches the visual ends and clicks land offset. Reset all of it. */
+  appearance: auto;
+  -webkit-appearance: auto;
+  width: 96px;
+  height: 22px; /* generous hit area — the thin default track was hard to grab */
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  accent-color: var(--sky-500);
+}
+
+.board-slider input[type='range']:focus {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.board-slider-value {
+  min-width: 3.6ch;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: end;
+}
+
+.board-colors {
+  display: grid;
+  grid-template-columns: repeat(8, auto);
+  gap: 0.28rem;
+}
+
+.board-color {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 120ms ease;
+}
+
+.board-color:hover {
+  transform: scale(1.15);
+}
+
+.board-color.is-active {
+  outline: 2px solid var(--sky-500);
+  outline-offset: 2px;
+}
+
+.board-color-custom {
+  position: relative;
+  overflow: hidden;
+  display: inline-grid;
+  place-items: center;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+}
+
+.board-color-custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.board-color-custom span {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+/* ----- zoom controls ----- */
+
+.board-zoom-controls {
+  position: absolute;
+  bottom: 0.6rem;
+  inset-inline-end: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--elev-1);
+}
+
+.board-zoom-value {
+  min-width: 4ch;
+  text-align: center;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* ----- players panel (always LEFT, scrollable) -----
+ * `contain: size` makes the panel's height come purely from the grid row
+ * (which the board column defines) instead of its own content, so both side
+ * panels always end exactly at the board+toolbar bottom edge. */
+
+.game-players-panel {
+  min-height: 0;
+  contain: size;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--elev-1);
+  padding: 0.5rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.game-players-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+/* Row order is fixed LTR: avatar → name → score → report flag. */
+.game-player {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 10px;
+  direction: ltr;
+}
+
+.game-player.is-you {
+  background: color-mix(in srgb, var(--sky-500) 8%, transparent);
+}
+
+.game-player.is-drawer {
+  background: color-mix(in srgb, var(--sky-500) 14%, transparent);
+}
+
+.game-player.has-guessed {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.game-player.is-offline {
+  opacity: 0.5;
+}
+
+.game-player-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-player-check {
+  color: var(--success);
+}
+
+.game-player-score {
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--sky-700, #2f7fe3);
+  font-size: 0.85rem;
+}
+
+/* Little red report flag — always visible in front of each row. */
+.game-player-report {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.game-player-report:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  transform: scale(1.12);
+}
+
+.game-player-report-spacer {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+/* ----- chat (always RIGHT; content direction follows language) ----- */
+
+.game-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  contain: size;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--elev-1);
+  overflow: hidden;
+}
+
+.game-chat-feed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.6rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.game-chat-msg {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.35;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.game-chat-msg strong {
+  color: var(--sky-700, #2f7fe3);
+}
+
+.game-chat-msg.is-system {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.game-chat-input {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-block-start: 1px solid var(--border);
+}
+
+.game-chat-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+/* ----- overlays ----- */
+
+.game-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--ink) 42%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.game-overlay-light {
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.game-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(430px, 100%);
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--elev-3);
+  text-align: center;
+  color: var(--sky-700, #2f7fe3);
+}
+
+.game-overlay-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
+.game-overlay-wide {
+  width: min(520px, 100%);
+}
+
+.game-overlay-big {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 900;
+  color: var(--sky-700, #2f7fe3);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-overlay-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.game-overlay-word {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--sky-700, #2f7fe3);
+}
+
+.game-word-choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.game-word-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.7rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--sky-500) 7%, transparent);
+  cursor: pointer;
+  transition:
+    transform 130ms ease,
+    background 130ms ease,
+    border-color 130ms ease;
+}
+
+.game-word-choice:hover {
+  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--sky-500) 15%, transparent);
+  border-color: var(--sky-500);
+}
+
+.game-word-text {
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.game-word-points {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.game-final-list {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.game-final-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sky-500) 6%, transparent);
+}
+
+.game-final-list li.is-you {
+  background: color-mix(in srgb, var(--sky-500) 16%, transparent);
+}
+
+.game-final-list li:first-child {
+  background: color-mix(in srgb, #f7c948 22%, transparent);
+}
+
+.game-final-rank {
+  width: 1.6rem;
+  font-weight: 900;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-final-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: start;
+}
+
+.game-final-score {
+  font-weight: 900;
+  color: var(--sky-700, #2f7fe3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Report dialog: each reason gets its own bordered, padded row. */
+.game-report-reasons {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6rem;
+  width: 100%;
+  margin-block: 0.25rem 0.5rem;
+}
+
+.game-report-reason {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  margin: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sky-500) 4%, transparent);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 130ms ease,
+    background 130ms ease,
+    transform 130ms ease;
+}
+
+.game-report-reason:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  transform: translateY(-1px);
+}
+
+.game-final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+/* ----- responsive ----- */
+
+@media (max-width: 1080px) {
+  /* Stack: board (with its bottom toolbar) → players → chat. The
+   * players/chat left-right split only applies when there is real width. */
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stacked layout: rows size themselves again — `contain: size` must be
+   * lifted or the panels would collapse to zero height. */
+  .game-players-panel {
+    contain: none;
+    max-height: 180px;
+  }
+
+  .game-chat {
+    contain: none;
+    min-height: 200px;
+    max-height: 300px;
+  }
+
+  .game-word-value {
+    max-width: 60vw;
+    font-size: 1rem;
+  }
+
+  .board-viewport {
+    width: 100%;
+  }
+}

@@ -111,7 +111,11 @@ export function createAppRouter() {
     if (guest && typeof roomId === 'string' && guest.roomID === roomId) {
       return;
     }
-    throw redirect({ to: '/login', replace: true, search: { next: typeof roomId === 'string' ? `/rooms/${roomId}` : '/' } });
+    throw redirect({
+      to: '/login',
+      replace: true,
+      search: { next: typeof roomId === 'string' ? `/rooms/${roomId}` : '/' },
+    });
   }
 
   const roomRoute = createRoute({

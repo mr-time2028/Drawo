@@ -308,3 +308,34 @@ func makeClient(id, userID, username string) *Client {
 		Done:     make(chan struct{}),
 	}
 }
+
+func TestRoom_HandleGameEvent_PlayAgain(t *testing.T) {
+	room := newTestRoomLobby(t, "owner-1", 2)
+	owner := makeClient("c1", "owner-1", "Owner")
+	friend := makeClient("c2", "u2", "Friend")
+	room.clients[owner.ID] = owner
+	room.clients[friend.ID] = friend
+	room.players[owner.UserID] = &PlayerState{UserID: owner.UserID, IsOnline: true, Score: 120, GuessedWord: true}
+	room.players[friend.UserID] = &PlayerState{UserID: friend.UserID, IsOnline: true, Score: 80}
+	room.playerOrder = []string{owner.UserID, friend.UserID}
+
+	// Rejected while the game is not finished.
+	room.gameState = GameStateDrawing
+	room.handleGameEvent(&RoomEvent{Client: owner, Payload: json.RawMessage(`{"event":"play_again"}`)})
+	assert.Equal(t, GameStateDrawing, room.gameState)
+
+	// Rejected for non-owners even when finished.
+	room.gameState = GameStateGameEnd
+	room.handleGameEvent(&RoomEvent{Client: friend, Payload: json.RawMessage(`{"event":"play_again"}`)})
+	assert.Equal(t, GameStateGameEnd, room.gameState)
+
+	// Owner restart: scores reset, fresh countdown, canvas cleared.
+	room.canvasOps = append(room.canvasOps, DrawOperation{Op: DrawOpStroke, ID: "x"})
+	room.handleGameEvent(&RoomEvent{Client: owner, Payload: json.RawMessage(`{"event":"play_again"}`)})
+	assert.Equal(t, GameStateCountdown, room.gameState)
+	assert.Equal(t, int64(0), room.players[owner.UserID].Score)
+	assert.False(t, room.players[owner.UserID].GuessedWord)
+	assert.Equal(t, 0, room.state.CurrentRound)
+	assert.Empty(t, room.canvasOps)
+	require.Equal(t, domain.RoomStatePlaying, room.state.State)
+}

@@ -51,6 +51,13 @@ func (l *reputationLedger) add(userID string, delta int64, reason string) {
 	if userID == "" || delta == 0 {
 		return
 	}
+	// Guests are ephemeral: they have no users/profiles rows and their
+	// "guest:<uuid>" IDs are not valid UUIDs, so persisting reputation for
+	// them is impossible (SQLSTATE 22P02) and meaningless — a new invite
+	// join is a brand-new identity anyway.
+	if domain.IsGuestID(userID) {
+		return
+	}
 	l.events = append(l.events, reputationEvent{UserID: userID, Delta: delta, Reason: reason})
 	l.applied[userID] += delta
 }

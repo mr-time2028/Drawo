@@ -36,6 +36,23 @@ func TestValidateDrawingPayload(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = ValidateDrawingPayload(json.RawMessage(`{"op":"clear"}`))
 	assert.NoError(t, err)
+
+	// Arrow shape uses line-style endpoint semantics.
+	validArrow := json.RawMessage(`{"op":"shape","shape":"arrow","color":"#abcdef","x":10,"y":20,"width":100,"height":80}`)
+	_, err = ValidateDrawingPayload(validArrow)
+	assert.NoError(t, err)
+
+	// Opacity is accepted in (0,1] and as the zero value.
+	validOpacity := json.RawMessage(`{"op":"stroke","tool":"marker","color":"#112233","size":4,"opacity":0.5,"points":[{"x":1,"y":2},{"x":3,"y":4}]}`)
+	_, err = ValidateDrawingPayload(validOpacity)
+	assert.NoError(t, err)
+
+	// Text tool.
+	validText := json.RawMessage(`{"op":"text","text":"hello","color":"#112233","x":10,"y":20,"font_size":24}`)
+	op, err = ValidateDrawingPayload(validText)
+	require.NoError(t, err)
+	assert.Equal(t, DrawOpText, op.Op)
+	assert.Equal(t, "hello", op.Text)
 }
 
 func TestValidateDrawingPayloadRejectsInvalidInput(t *testing.T) {
@@ -51,6 +68,13 @@ func TestValidateDrawingPayloadRejectsInvalidInput(t *testing.T) {
 		json.RawMessage(`{"op":"shape","shape":"star","color":"#abcdef","x":10,"y":20,"width":100,"height":80}`),
 		json.RawMessage(`{"op":"shape","shape":"rectangle","color":"#abcdef","x":10,"y":20,"width":0,"height":80}`),
 		json.RawMessage(`{"op":"fill","color":"#abcdef","x":-1,"y":20}`),
+		json.RawMessage(`{"op":"stroke","tool":"pencil","color":"#112233","size":4,"opacity":1.5,"points":[{"x":1,"y":2},{"x":3,"y":4}]}`),
+		json.RawMessage(`{"op":"stroke","tool":"pencil","color":"#112233","size":4,"opacity":-0.2,"points":[{"x":1,"y":2},{"x":3,"y":4}]}`),
+		json.RawMessage(`{"op":"text","text":"","color":"#112233","x":10,"y":20,"font_size":24}`),
+		json.RawMessage(`{"op":"text","text":"hi","color":"#112233","x":10,"y":20,"font_size":0}`),
+		json.RawMessage(`{"op":"text","text":"hi","color":"#112233","x":10,"y":20,"font_size":4096}`),
+		json.RawMessage(`{"op":"text","text":"hi","color":"nope","x":10,"y":20,"font_size":24}`),
+		json.RawMessage(`{"op":"shape","shape":"arrow","color":"#abcdef","x":10,"y":20,"width":99999,"height":80}`),
 	}
 	for _, tc := range cases {
 		_, err := ValidateDrawingPayload(tc)

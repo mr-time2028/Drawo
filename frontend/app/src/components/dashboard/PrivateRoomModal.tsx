@@ -100,18 +100,14 @@ export function PrivateRoomModal({
   const passwordError = useMemo(() => {
     if (trimmedPassword.length === 0) return '';
     if (trimmedPassword.length < PASSWORD_MIN) {
-      return t(
-        'dashboard.privateRoom.passwordTooShort',
-        'Password must be at least {{min}} characters.',
-        { min: PASSWORD_MIN },
-      );
+      return t('dashboard.privateRoom.passwordTooShort', 'Password must be at least {{min}} characters.', {
+        min: PASSWORD_MIN,
+      });
     }
     if (trimmedPassword.length > PASSWORD_MAX) {
-      return t(
-        'dashboard.privateRoom.passwordTooLong',
-        'Password must be at most {{max}} characters.',
-        { max: PASSWORD_MAX },
-      );
+      return t('dashboard.privateRoom.passwordTooLong', 'Password must be at most {{max}} characters.', {
+        max: PASSWORD_MAX,
+      });
     }
     return '';
   }, [trimmedPassword, t]);
@@ -211,12 +207,7 @@ export function PrivateRoomModal({
       className="private-room-modal"
       footer={
         <div className="private-room-footer">
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            type="button"
-            className="private-footer-cancel"
-          >
+          <Button variant="outline" onClick={handleClose} type="button" className="private-footer-cancel">
             {t('common.cancel', 'Cancel')}
           </Button>
           <Button
@@ -305,10 +296,7 @@ export function PrivateRoomModal({
             type="text"
             value={password}
             maxLength={PASSWORD_MAX}
-            placeholder={t(
-              'dashboard.privateRoom.passwordPlaceholder',
-              'Leave empty for an open room',
-            )}
+            placeholder={t('dashboard.privateRoom.passwordPlaceholder', 'Leave empty for an open room')}
             onChange={(e) => setPassword(e.target.value)}
           />
           <p className={cn('field-hint', passwordError && 'field-error')}>
